@@ -1,82 +1,6 @@
  <!doctype html>
 <html lang="id">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Dodge The Block — Galaxy Compact</title>
-<link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <div class="app">
-    <header class="top">
-      <h1>Dodge The Block — Galaxy</h1>
-      <div class="top-right">
-        <button id="menuBtn" class="btn">Menu</button>
-      </div>
-    </header>
-
-    <main class="main">
-      <div class="canvas-wrap">
-        <canvas id="game" aria-label="game canvas"></canvas>
-      </div>
-
-      <div class="hud" id="hudRow">
-        <div class="badge" id="status">Status: Ready</div>
-        <div class="badge">Level: <strong id="level">1</strong></div>
-        <div class="badge">Time: <strong id="levelTime">--</strong>s</div>
-        <div class="badge">Score: <strong id="score">0</strong></div>
-        <div class="badge">Lives: <strong id="lives">3</strong></div>
-        <div class="badge">Shield: <strong id="shield">0</strong></div>
-      </div>
-
-      <div class="controls-row">
-        <!-- arrow buttons intentionally removed -->
-        <button id="pause" class="btn">Pause</button>
-        <button id="restart" class="btn">Restart</button>
-        <button id="leaderBtn" class="btn">Leaderboard</button>
-      </div>
-
-      <p class="hint">Touch canvas to move on mobile. On PC use ← / → or A / D. Power-ups lebih besar & spawn rapi.</p>
-    </main>
-
-    <!-- menu panel -->
-    <div id="menuPanel" class="panel hidden">
-      <div class="panel-row">
-        <strong>Menu</strong>
-        <button id="closeMenu" class="btn small">Close</button>
-      </div>
-      <div class="menu-body">
-        <label for="levelSelect">Start level</label>
-        <select id="levelSelect">
-          <option value="0">1 (Easy)</option>
-          <option value="1">2</option>
-          <option value="2">3</option>
-          <option value="3">4</option>
-          <option value="4">5 (Hard)</option>
-        </select>
-        <button id="applyLevel" class="btn small">Apply</button>
-      </div>
-    </div>
-
-    <!-- leaderboard -->
-    <div id="leaderPanel" class="panel hidden">
-      <div class="panel-row">
-        <strong>Leaderboard</strong>
-        <button id="closeLeader" class="btn small">Close</button>
-      </div>
-      <div id="scoreList" class="list"></div>
-      <div style="margin-top:8px">
-        <button id="clearScores" class="btn small">Clear</button>
-      </div>
-    </div>
-  </div>
-
-<script src="script.js"></script>
-</body>
-</html>
-<!doctype html>
-<html lang="id">
-<head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Dodge The Block — Galaxy (SDS Integrated)</title>
@@ -679,4 +603,3 @@ window.spawnPowerup = spawnPowerupAt;
 </script>
 </body>
 </html>
-
