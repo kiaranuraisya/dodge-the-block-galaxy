@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dodge The Block — Compact Galaxy</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Dodge The Block — Compact Galaxy</h1>
+      <div class="top-controls">
+        <button id="menuBtn" class="btn">Menu</button>
+      </div>
+    </header>
+
+    <div class="canvas-wrap">
+      <canvas id="game" width="360" height="700" aria-label="game canvas"></canvas>
+    </div>
+
+    <div class="hud" id="hudRow">
+      <div class="badge" id="status">Status: Ready</div>
+      <div class="badge">Level: <strong id="level">1</strong></div>
+      <div class="badge">Time: <strong id="levelTime">--</strong>s</div>
+      <div class="badge">Score: <strong id="score">0</strong></div>
+      <div class="badge">Lives: <strong id="lives">3</strong></div>
+      <div class="badge">Shield: <strong id="shield">0</strong></div>
+    </div>
+
+    <div class="controls-row">
+      <button id="left" class="btn">◀</button>
+      <button id="pause" class="btn">Pause</button>
+      <button id="right" class="btn">▶</button>
+      <button id="restart" class="btn">Restart</button>
+      <button id="leaderBtn" class="btn">Leaderboard</button>
+    </div>
+
+    <div class="small">Touch canvas to move. Power-ups tampil sebagai bentuk sederhana (no big circles). Leaderboard disimpan di perangkat.</div>
+
+    <!-- Menu -->
+    <div id="menuPanel" class="panel hidden">
+      <div class="panel-row">
+        <strong>Menu</strong>
+        <button id="closeMenu" class="btn small-btn">Close</button>
+      </div>
+      <div class="list">
+        <div class="row">
+          <span>Choose level</span>
+          <select id="levelSelect">
+            <option value="0">Level 1</option>
+            <option value="1">Level 2</option>
+            <option value="2">Level 3</option>
+            <option value="3">Level 4</option>
+            <option value="4">Level 5</option>
+          </select>
+        </div>
+
+        <div class="row" style="margin-top:8px">
+          <span>Sensitivity</span>
+          <input id="sensitivity" type="range" min="0.4" max="1.6" step="0.05" value="1.0">
+        </div>
+
+        <div class="row" style="margin-top:8px">
+          <span>Difficulty</span>
+          <select id="difficultySelect">
+            <option value="easy">Easy</option>
+            <option value="medium" selected>Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+        </div>
+
+        <div class="row" style="margin-top:8px">
+          <button id="applyLevel" class="btn">Apply</button>
+          <button id="openLeaderboard" class="btn">Open Leaderboard</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Leaderboard -->
+    <div id="leaderPanel" class="panel hidden">
+      <div class="panel-row">
+        <strong>Leaderboard</strong>
+        <button id="closeLeader" class="btn small-btn">Close</button>
+      </div>
+      <div id="scoreList" class="list"></div>
+      <div style="margin-top:8px">
+        <button id="clearScores" class="btn">Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
