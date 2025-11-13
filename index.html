@@ -74,3 +74,609 @@
 <script src="script.js"></script>
 </body>
 </html>
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Dodge The Block — Galaxy (SDS Integrated)</title>
+<style>
+  :root{
+    --bg-0:#020215; --bg-1:#071028; --accent:#10b981; --muted:#9fb0c8;
+    --panel:#041226; --glass: rgba(255,255,255,0.04);
+  }
+  html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial;background:linear-gradient(180deg,var(--bg-0),var(--bg-1));color:#e6eef8}
+  .wrap{display:flex;flex-direction:column;align-items:center;padding:14px 8px;gap:10px}
+  header{width:100%;max-width:420px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+  h1{font-size:16px;margin:0;color:#f7fbff;font-weight:600}
+  .canvas-wrap{width:100%;max-width:420px;border-radius:14px;padding:12px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));box-shadow:0 12px 36px rgba(2,6,23,0.6)}
+  canvas{width:100%;height:calc(78vh - 80px);border-radius:10px;display:block;background:transparent}
+  .controls{display:flex;gap:8px;justify-content:center;margin-top:10px;flex-wrap:wrap}
+  button{padding:8px 12px;border-radius:10px;border:0;background:var(--accent);color:#042027;font-weight:700;min-width:72px}
+  .hud{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;margin-top:6px}
+  .badge{padding:6px 10px;border-radius:999px;background:var(--glass);border:1px solid rgba(255,255,255,0.05);font-size:13px;color:#dbeafe}
+  .small{font-size:13px;color:var(--muted);text-align:center;margin-top:6px}
+  .menu{display:flex;gap:8px}
+  /* responsive */
+  @media(min-width:720px){
+    canvas{height:640px}
+    h1{font-size:20px}
+  }
+  /* simple modal */
+  .modal{position:fixed;left:0;right:0;top:0;bottom:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);z-index:99}
+  .modal.open{display:flex}
+  .card{background:#041228;padding:14px;border-radius:12px;max-width:520px;width:90%}
+  .list{margin:6px 0;padding:6px;display:flex;gap:8px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Dodge The Block — Galaxy (SDS)</h1>
+      <div class="menu">
+        <button id="homeBtn" style="background:var(--panel);color:#dbeafe">Home</button>
+        <button id="menuBtn" style="background:var(--panel);color:#dbeafe">Menu</button>
+      </div>
+    </header>
+
+    <div class="canvas-wrap">
+      <canvas id="game" aria-label="game canvas"></canvas>
+    </div>
+
+    <div class="controls">
+      <button id="pause">Pause</button>
+      <button id="restart">Restart</button>
+      <button id="leaderBtn">Leaderboard</button>
+      <button id="connectBtn">Connect SDS</button>
+    </div>
+
+    <div class="hud">
+      <div class="badge" id="status">Status: Ready</div>
+      <div class="badge">Level: <strong id="level">1</strong></div>
+      <div class="badge">Time: <strong id="levelTime">--</strong>s</div>
+      <div class="badge">Score: <strong id="score">0</strong></div>
+      <div class="badge">Lives: <strong id="lives">3</strong></div>
+      <div class="badge">Shild: <strong id="shild">0</strong></div>
+    </div>
+
+    <div class="small">Touch canvas to move. Power-ups from SDS appear as simple icons. Leaderboard stored on Somnia stream (or local fallback).</div>
+  </div>
+
+  <!-- modal leaderboard -->
+  <div id="modal" class="modal"><div class="card">
+    <h3>Leaderboard (Live)</h3>
+    <div id="leaderBoardList" class="list"></div>
+    <div style="text-align:right;margin-top:8px">
+      <button id="closeModal" style="background:var(--panel);color:#dbeafe">Close</button>
+    </div>
+  </div></div>
+
+<script>
+/*
+  Dodge The Block — SDS Integrated (single-file)
+  - Replace SOMNIA_API_KEY, SOMNIA_STREAM_ID with your real credentials to enable on-chain features.
+  - Works with fallback (localStorage) if SDS not initialized.
+*/
+
+/* ====== CONFIG: replace these with real values when ready ====== */
+const SOMNIA_API_KEY = ""; // <-- replace with Somnia testnet key
+const SOMNIA_STREAM_ID = ""; // <-- replace with your stream id (string)
+/* ============================================================= */
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const pauseBtn = document.getElementById('pause');
+const restartBtn = document.getElementById('restart');
+const leaderBtn = document.getElementById('leaderBtn');
+const connectBtn = document.getElementById('connectBtn');
+const statusEl = document.getElementById('status');
+const levelEl = document.getElementById('level');
+const levelTimeEl = document.getElementById('levelTime');
+const scoreEl = document.getElementById('score');
+const livesEl = document.getElementById('lives');
+const shildEl = document.getElementById('shild');
+const modal = document.getElementById('modal');
+const leaderBoardList = document.getElementById('leaderBoardList');
+const closeModal = document.getElementById('closeModal');
+
+let audioCtx=null, muted=false;
+function tryBeep(freq=440,d=0.04,v=0.06){ if(muted) return; try{ if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)(); const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.type='sine'; o.frequency.value=freq; g.gain.value=v; o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + d);}catch(e){} }
+
+// responsive canvas
+function resizeCanvas(){
+  const padW = 28;
+  let W = Math.min(window.innerWidth - padW, 420);
+  let H = Math.min(window.innerHeight - 220, 820);
+  if(window.innerWidth < 420) W = window.innerWidth - 20;
+  canvas.width = Math.max(320, W);
+  canvas.height = Math.max(420, H);
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+/* GAME CONFIG */
+const LANES = 4;
+const MAX_ENEMIES = 14;
+const POWERUP_CHANCE = 0.05;
+const TRAIL_FADE = 320;
+
+let player = {w:42,h:42,x:0,y:0,vx:0,maxSpeed:12,accel:1.9,friction:0.84,shild:0};
+let enemies = [], powerups = [], trailParticles = [], stars = [];
+let score=0,lives=3,running=true,levelIndex=0,levelTimer=0,paused=false;
+let spawnInterval=820,fallbackTimer=0,last=Date.now();
+
+/* levels */
+const LEVELS = [
+  {duration:12, spawnInterval:820, speedMul:1.0},
+  {duration:18, spawnInterval:700, speedMul:1.2},
+  {duration:22, spawnInterval:620, speedMul:1.4},
+  {duration:40, spawnInterval:520, speedMul:1.6},
+  {duration:9999, spawnInterval:420, speedMul:1.9}
+];
+setLevel(0);
+
+/* starfield */
+function initStars(){ stars=[]; const n = Math.max(30, Math.floor(canvas.width*0.06)); for(let i=0;i<n;i++){ stars.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,r:Math.random()*1.8+0.6,alpha:0.2+Math.random()*0.8,speed:0.02+Math.random()*0.08}); } }
+initStars();
+
+/* compute lanes */
+function computeLanes(){ const lanes=[]; const margin=20; const usable=canvas.width - margin*2; for(let i=0;i<LANES;i++){ lanes.push(margin + usable * (i + 0.5) / LANES); } return lanes; }
+
+/* helper */
+function setLevel(i){ levelIndex = Math.min(i, LEVELS.length-1); spawnInterval = LEVELS[levelIndex].spawnInterval; levelTimer = LEVELS[levelIndex].duration * 1000; levelEl.textContent = levelIndex + 1; levelTimeEl.textContent = Math.ceil(levelTimer/1000); statusEl.textContent = 'Status: Level ' + (levelIndex+1); }
+
+/* spawn enemy */
+function spawnEnemy(){
+  if(enemies.length >= MAX_ENEMIES) return;
+  const lanes = computeLanes();
+  const laneIdx = Math.floor(Math.random()*LANES);
+  const laneX = lanes[laneIdx];
+  const size = 18 + Math.random()*34;
+  const base = 2 + Math.random()*2.6;
+  const speed = base * LEVELS[levelIndex].speedMul;
+  const phase = Math.random()*Math.PI*2;
+  const oscAmp = 8 + Math.random()*14;
+  const oscSpeed = 0.004 + Math.random()*0.01;
+  let type = 'red';
+  const r = Math.random();
+  if(r < 0.12) type='big';
+  else if(r < 0.30) type='zig';
+  else if(r < 0.46) type='home';
+  const e = {lane:laneIdx, x: laneX - size/2, y:-size, w:size, h:size, speed, ay:0.02 + Math.random()*0.03, type, trail:[], phase, oscAmp, oscSpeed};
+  enemies.push(e);
+}
+
+/* spawn powerup */
+function spawnPowerupAt(x,y){
+  // limit frequency
+  if(powerups.length >= 2) return;
+  for(const p of powerups){ const dx=(p.x+p.w/2)-x; const dy=(p.y+p.h/2)-y; if(Math.sqrt(dx*dx+dy*dy) < 110) return; }
+  const types = ['shild','life','boom','score'];
+  const t = types[Math.floor(Math.random()*types.length)];
+  const size = 36;
+  powerups.push({x: Math.max(8, Math.min(x, canvas.width - size - 8)), y, w:size, h:size, type:t, dy:1.8, rot:Math.random()*Math.PI});
+}
+
+/* trail add */
+function addTrail(e){
+  e.trail = e.trail || [];
+  const tsize = Math.max(4, Math.round(e.w/4));
+  e.trail.push({x: e.x + e.w/2, y: e.y + e.h/2, age:0, life:TRAIL_FADE, col: (e.type==='big'?'#9fb0ff': e.type==='zig'?'#c77bff': e.type==='home'?'#ffb86b':'#ff6b6b'), size: tsize});
+  if(e.trail.length > 14) e.trail.shift();
+}
+
+/* particles */
+function spawnParticles(x,y,col,count=12){ for(let i=0;i<count;i++){ trailParticles.push({x,y,vx:(Math.random()-0.5)*3, vy:(Math.random()-1.5)*-2, age:0, life:200+Math.random()*500, col}); } }
+
+/* input: touch only (no arrow buttons) */
+let touchTarget=null;
+canvas.addEventListener('touchstart', e=>{ const t=e.touches[0]; touchTarget = t.clientX - canvas.getBoundingClientRect().left; e.preventDefault(); });
+canvas.addEventListener('touchmove', e=>{ const t=e.touches[0]; touchTarget = t.clientX - canvas.getBoundingClientRect().left; e.preventDefault(); });
+canvas.addEventListener('touchend', ()=>{ touchTarget = null; });
+
+/* keyboard controls for PC */
+document.addEventListener('keydown', (e)=>{
+  if(e.key === 'ArrowLeft' || e.key === 'a'){ player.vx -= player.accel*1.6; }
+  if(e.key === 'ArrowRight' || e.key === 'd'){ player.vx += player.accel*1.6; }
+  if(e.key === ' '){ togglePause(); }
+});
+
+/* fallback spawn */
+function fallbackStep(dt){
+  fallbackTimer += dt;
+  if(fallbackTimer > spawnInterval){
+    fallbackTimer = 0;
+    spawnEnemy();
+    if(Math.random() < POWERUP_CHANCE) spawnPowerupAt(Math.random()*(canvas.width-40), -22);
+    spawnInterval = Math.max(360, spawnInterval - 0.26);
+  }
+}
+
+/* update */
+function update(dt){
+  // stars
+  for(const s of stars){ s.y += s.speed * dt * 0.02; if(s.y > canvas.height+10) s.y = -10; }
+
+  // enemies
+  for(let i=enemies.length-1;i>=0;i--){
+    const e = enemies[i];
+    const lanes = computeLanes();
+    const targetX = Math.max(8, Math.min(lanes[e.lane]-e.w/2, canvas.width - e.w - 8));
+    e.x += (targetX - e.x) * 0.08;
+    e.phase += e.oscSpeed * dt;
+    const vOsc = Math.sin(e.phase) * e.oscAmp * 0.02;
+    e.speed += e.ay * (dt/16);
+    e.y += e.speed * (dt/16) + vOsc;
+
+    // trail
+    if(Math.random() < 0.62) addTrail(e);
+    if(e.trail) for(const t of e.trail) t.age += dt;
+
+    // collision
+    if(rectIntersect(player, e) && running){
+      onPlayerHit(e);
+      enemies.splice(i,1);
+      continue;
+    }
+    // offscreen
+    if(e.y > canvas.height + 120) { enemies.splice(i,1); score++; scoreEl.textContent = score; }
+  }
+
+  // powerups
+  for(let i=powerups.length-1;i>=0;i--){
+    const p = powerups[i];
+    p.y += p.dy * (dt/16);
+    p.rot += 0.01 * (dt/16);
+    if(rectIntersect(player, {x:p.x,y:p.y,w:p.w,h:p.h})){
+      applyPowerup(p.type);
+      powerups.splice(i,1);
+      continue;
+    }
+    if(p.y > canvas.height + 80) powerups.splice(i,1);
+  }
+
+  // trailParticles
+  for(let i=trailParticles.length-1;i>=0;i--){
+    const t = trailParticles[i];
+    t.age += dt;
+    t.x += t.vx * dt * 0.02;
+    t.y += t.vy * dt * 0.02;
+    if(t.age > t.life) trailParticles.splice(i,1);
+  }
+
+  // level timer
+  if(levelTimer > 0){
+    levelTimer -= dt;
+    levelTimeEl.textContent = Math.max(0, Math.ceil(levelTimer/1000));
+    if(levelTimer <= 0){
+      const next = Math.min(levelIndex + 1, LEVELS.length-1);
+      setLevel(next);
+      score += 8; scoreEl.textContent = score;
+    }
+  }
+}
+
+/* collisions & powerups */
+function rectIntersect(a,b){
+  const pad = 4;
+  return !(a.x + a.w - pad < b.x || a.x > b.x + b.w - pad || a.y + a.h - pad < b.y || a.y > b.y + b.h - pad);
+}
+function onPlayerHit(e){
+  if(player.shild > 0){
+    player.shild--; shildEl.textContent = player.shild; tryBeep(980,0.05,0.06); spawnParticles(player.x + player.w/2, player.y + player.h/2, '#9be7ff', 12); return;
+  }
+  lives--; livesEl.textContent = lives; tryBeep(220,0.12,0.14); spawnParticles(player.x + player.w/2, player.y + player.h/2, '#ff6b6b', 20);
+  if(lives <= 0){ running = false; statusEl.textContent = 'GAME OVER'; publishScore(score); }
+}
+function applyPowerup(t){
+  if(t==='shild'){ player.shild = Math.min(3, player.shild + 1); shildEl.textContent = player.shild; tryBeep(1180,0.06,0.07); }
+  else if(t==='life'){ lives = Math.min(5, lives + 1); livesEl.textContent = lives; tryBeep(960,0.06,0.06); }
+  else if(t==='boom'){ enemies = enemies.filter(x => x.type === 'big'); spawnParticles(canvas.width/2, canvas.height/2, '#ffd36b', 40); tryBeep(160,0.12,0.08); }
+  else if(t==='score'){ score += 12; scoreEl.textContent = score; tryBeep(1400,0.06,0.06); }
+}
+
+/* draw */
+function drawBackground(){
+  const g = ctx.createLinearGradient(0,0,0,canvas.height);
+  g.addColorStop(0, '#020215');
+  g.addColorStop(0.6, '#071028');
+  g.addColorStop(1, '#041226');
+  ctx.fillStyle = g; ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // stars
+  for(const s of stars){
+    ctx.globalAlpha = s.alpha * 0.9;
+    ctx.fillStyle = '#eaf6ff';
+    ctx.fillRect(s.x, s.y, s.r, s.r);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function draw(){
+  drawBackground();
+
+  // trailParticles
+  for(const p of trailParticles){
+    const a = 1 - (p.age / p.life);
+    ctx.globalAlpha = Math.max(0, a);
+    ctx.fillStyle = p.col;
+    ctx.fillRect(p.x, p.y, 3, 3);
+    ctx.globalAlpha = 1;
+  }
+
+  // per-enemy trail
+  for(const e of enemies){
+    if(e.trail){
+      for(const t of e.trail){
+        const a = 1 - (t.age / t.life);
+        if(a <= 0) continue;
+        ctx.save();
+        ctx.globalAlpha = Math.min(0.85, a*0.8);
+        ctx.fillStyle = t.col;
+        ctx.shadowBlur = Math.max(8, Math.round(e.w * 0.6));
+        ctx.shadowColor = t.col;
+        const w = t.size * 1.8, h = t.size * 1.8;
+        roundRect(t.x - w/2, t.y - h/2, w, h, Math.max(6, t.size/3), true);
+        ctx.restore();
+      }
+    }
+  }
+
+  // enemies
+  for(const e of enemies){
+    ctx.save();
+    ctx.shadowBlur = Math.max(12, Math.round(e.w * 0.6));
+    if(e.type==='big'){ ctx.fillStyle = '#33f3c2'; ctx.shadowColor = '#33f3c2'; }
+    else if(e.type==='zig'){ ctx.fillStyle = '#c377ff'; ctx.shadowColor = '#c377ff'; }
+    else if(e.type==='home'){ ctx.fillStyle = '#ffb86b'; ctx.shadowColor = '#ffb86b'; }
+    else { ctx.fillStyle = '#ff6b6b'; ctx.shadowColor = '#ff6b6b'; }
+    roundRect(e.x, e.y, e.w, e.h, Math.max(6, e.w/6), true);
+    ctx.restore();
+  }
+
+  // powerups (icon-only, slightly rotating for life)
+  ctx.font = '22px serif';
+  for(const p of powerups){
+    const cx = p.x + p.w/2, cy = p.y + p.h/2;
+    ctx.save();
+    // subtle shadow scaled with enemy size
+    ctx.globalAlpha = 1;
+    ctx.translate(cx, cy);
+    if(p.type === 'life') ctx.rotate(p.rot || 0);
+    // draw icon shape (simple rounded square filled with neon)
+    ctx.fillStyle = (p.type==='shild')? '#ffd36b' : (p.type==='life')? '#6ef07a' : (p.type==='boom')? '#ff7b7b' : '#ffd86a';
+    roundRect(-p.w/2+2, -p.h/2+2, p.w-4, p.h-4, 8, true);
+    // draw symbol (text)
+    ctx.fillStyle = '#041020'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    let emoji='?';
+    if(p.type==='shild') emoji='🛡️';
+    else if(p.type==='life') emoji='➕';
+    else if(p.type==='boom') emoji='💣';
+    else if(p.type==='score') emoji='★';
+    ctx.fillText(emoji, 0, 0);
+    ctx.restore();
+  }
+
+  // player with shield effect (3Dish)
+  ctx.save();
+  // slight 3D: gradient fill
+  const g=ctx.createLinearGradient(player.x, player.y, player.x, player.y+player.h);
+  g.addColorStop(0, '#80deff'); g.addColorStop(1, '#2fb3ff');
+  ctx.fillStyle = g;
+  // shadow for depth
+  if(player.shild>0){ ctx.shadowBlur = 30; ctx.shadowColor = '#7fe8ff'; }
+  else { ctx.shadowBlur = 10; ctx.shadowColor = 'rgba(0,0,0,0.6)'; }
+  roundRect(player.x, player.y, player.w, player.h, 10, true);
+  ctx.restore();
+
+  // HUD text
+  ctx.fillStyle = '#e6eef8'; ctx.font = '14px sans-serif';
+  ctx.fillText('Time Lvl: ' + Math.max(0, Math.round(levelTimer/1000)) + 's', 12, 22);
+}
+
+function roundRect(x,y,w,h,r,fill,stroke){
+  if(typeof r==='undefined') r=6;
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+  if(fill) ctx.fill(); if(stroke) ctx.stroke();
+}
+
+/* main loop */
+let lastFrame = Date.now();
+function loop(){
+  const now = Date.now();
+  const dt = Math.min(60, now - lastFrame);
+  lastFrame = now;
+  if(running && !paused){
+    applyInput();
+    fallbackStep(dt);
+    update(dt);
+  }
+  draw();
+  requestAnimationFrame(loop);
+}
+
+/* input movement (touch & keyboard control) */
+function applyInput(){
+  if(touchTarget != null){
+    const target = touchTarget - player.w/2;
+    const diff = target - player.x;
+    player.vx += diff * 0.05;
+  } else {
+    // natural friction when no touch
+    player.vx *= player.friction;
+    if(Math.abs(player.vx) < 0.02) player.vx = 0;
+  }
+  if(player.vx > player.maxSpeed) player.vx = player.maxSpeed;
+  if(player.vx < -player.maxSpeed) player.vx = -player.maxSpeed;
+  player.x += player.vx;
+  if(player.x < 8){ player.x = 8; player.vx = 0; }
+  if(player.x > canvas.width - player.w - 8){ player.x = canvas.width - player.w - 8; player.vx = 0; }
+}
+
+/* reset / handlers */
+function resetGame(){
+  resizeCanvas();
+  player.x = canvas.width/2 - player.w/2;
+  player.y = canvas.height - player.h - 16;
+  player.vx = 0; player.shild = 0;
+  enemies = []; powerups = []; trailParticles = []; stars = [];
+  initStars();
+  score = 0; scoreEl.textContent = score;
+  lives = 3; livesEl.textContent = lives;
+  shildEl.textContent = player.shild;
+  running = true; paused=false;
+  setLevel(0); spawnInterval = LEVELS[levelIndex].spawnInterval; fallbackTimer=0;
+  tryBeep(780,0.06,0.08);
+}
+restartBtn.addEventListener('click', resetGame);
+pauseBtn.addEventListener('click', togglePause);
+leaderBtn.addEventListener('click', ()=>{ modal.classList.add('open'); renderLeaderBoardUI();});
+closeModal.addEventListener('click', ()=>{ modal.classList.remove('open');});
+connectBtn.addEventListener('click', ()=>{ connectSomnia(); });
+
+function togglePause(){ paused = !paused; pauseBtn.textContent = paused ? 'Resume' : 'Pause'; }
+
+/* ========================
+   Somnia integration code
+   - minimal generic API patterns
+   - replace placeholders with real Somnia SDK usage
+   ========================= */
+
+let somnia = {
+  connected: false,
+  // Dummy connection for fallback
+  connect: async function(){ 
+    if(!SOMNIA_API_KEY || !SOMNIA_STREAM_ID) {
+      console.warn('SDS credentials missing — running in fallback mode (local leaderboard).');
+      statusEl.textContent = 'Status: Fallback (SDS disabled)';
+      return false;
+    }
+    // Attempt to connect real SDS here (pseudo-code)
+    // Example: window.SomniaSDK.init({apiKey:SOMNIA_API_KEY, network:'testnet'});
+    // then subscribe to stream SOMNIA_STREAM_ID
+    try{
+      // (Placeholder) simulate connection delay
+      statusEl.textContent = 'Status: Connecting to SDS...';
+      await new Promise(r=>setTimeout(r,800));
+      somnia.connected = true;
+      statusEl.textContent = 'Status: SDS connected';
+      // subscribe to stream events (simulate)
+      somnia.subscribeToStream(SOMNIA_STREAM_ID, onSomniaEvent);
+      return true;
+    }catch(e){
+      console.error('SDS connect failed', e);
+      statusEl.textContent = 'Status: SDS connect failed';
+      return false;
+    }
+  },
+  // publish a new score or event
+  publish: async function(payload){
+    if(!somnia.connected){ // fallback: save to local leaderboard
+      saveLocalScore(payload);
+      return;
+    }
+    // TODO: replace with real SDK call to push event to somnia stream
+    // e.g. SomniaSDK.publish(streamId, payload);
+    console.log('Publishing to SDS (placeholder):', payload);
+  },
+  // subscribe (placeholder simulation)
+  subscribeToStream: function(streamId, cb){
+    // In real code: SomniaSDK.subscribe(streamId, cb)
+    // Here we'll simulate occasional "remote event" for demonstration
+    setInterval(()=>{
+      if(Math.random() < 0.02){ // occasionally spawn a remote powerup
+        const types = ['shild','life','boom','score'];
+        const t = types[Math.floor(Math.random()*types.length)];
+        // pick random lane x
+        const lanes = computeLanes();
+        const lx = lanes[Math.floor(Math.random()*lanes.length)];
+        cb({type:'powerup_spawn', payload:{type:t, x:lx}});
+      }
+    }, 1300);
+  }
+};
+
+function onSomniaEvent(msg){
+  // msg.type == 'powerup_spawn' -> spawn items dynamically
+  if(msg && msg.type === 'powerup_spawn'){
+    spawnPowerupAt(msg.payload.x, -40);
+  }
+}
+
+/* publish score when game over */
+async function publishScore(scoreVal){
+  const user = 'player-' + (Math.random()*10000|0);
+  const payload = {action:'score', player:user, score:scoreVal, ts: Date.now()};
+  if(somnia.connected) {
+    await somnia.publish(payload);
+  } else {
+    saveLocalScore(payload);
+  }
+  // also update local leaderboard UI
+  addToLocalLeaderboard(payload);
+}
+
+/* ===== Local leaderboard fallback (and used for UI) ===== */
+function saveLocalScore(payload){
+  try{
+    const key = 'dodge_leaderboard';
+    const cur = JSON.parse(localStorage.getItem(key) || '[]');
+    cur.push(payload);
+    cur.sort((a,b)=>b.score - a.score);
+    localStorage.setItem(key, JSON.stringify(cur.slice(0,40)));
+  }catch(e){}
+}
+function addToLocalLeaderboard(payload){
+  saveLocalScore(payload);
+  renderLeaderBoardUI();
+}
+function getLocalLeaderboard(){
+  try{ return JSON.parse(localStorage.getItem('dodge_leaderboard')||'[]'); }catch(e){ return []; }
+}
+function renderLeaderBoardUI(){
+  const list = getLocalLeaderboard();
+  leaderBoardList.innerHTML = '';
+  if(list.length === 0){
+    leaderBoardList.innerHTML = '<div style="color:var(--muted)">No scores yet</div>';
+    return;
+  }
+  list.slice(0,20).forEach((it, idx)=>{
+    const el = document.createElement('div');
+    el.style.minWidth='100%';
+    el.style.padding='6px';
+    el.style.borderRadius='8px';
+    el.style.background='rgba(255,255,255,0.02)';
+    el.style.marginBottom='6px';
+    el.innerHTML = `<strong>#${idx+1}</strong> &nbsp; ${it.player || 'anon'} &nbsp; <span style="float:right">${it.score}</span>`;
+    leaderBoardList.appendChild(el);
+  });
+}
+
+/* Connect SDS when user clicks */
+async function connectSomnia(){
+  const ok = await somnia.connect();
+  if(ok) {
+    statusEl.textContent = 'SDS: connected';
+    connectBtn.textContent = 'SDS: Connected';
+  } else {
+    statusEl.textContent = 'SDS: fallback';
+  }
+}
+
+/* init + loop */
+function initGame(){
+  resetGame();
+  loop();
+}
+initGame();
+
+/* expose spawn API for testing */
+window.spawnEnemyFromStream = spawnEnemy;
+window.spawnPowerup = spawnPowerupAt;
+
+</script>
+</body>
+</html>
+
