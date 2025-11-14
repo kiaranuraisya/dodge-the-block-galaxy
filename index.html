@@ -1,313 +1,475 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Dodge The Block — Galaxy (SDS-ready)</title>
+<style>
+  :root{
+    --bg1:#020215; --bg2:#041226; --accent:#0ea5a5; --hud:#0f1724;
+  }
+  html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial;background:radial-gradient(ellipse at top,#02102b 0%, #030618 45%, #020316 100%);color:#e6eef8}
+  .wrap{display:flex;flex-direction:column;align-items:center;padding:14px;gap:10px}
+  header{width:100%;max-width:420px;display:flex;justify-content:space-between;align-items:center}
+  h1{font-size:18px;margin:6px;color:#f0f7ff}
+  canvas{width:100%;max-width:420px;border-radius:14px;background:transparent;display:block;box-shadow:0 14px 40px rgba(2,6,23,0.6);aspect-ratio: 9/16}
+  .controls{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;justify-content:center}
+  button{padding:10px 12px;border-radius:10px;border:0;background:var(--accent);color:#071026;font-weight:700;min-width:68px}
+  .hud{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;margin-top:6px;max-width:420px}
+  .badge{padding:6px 10px;border-radius:999px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.04);font-size:13px;color:#dbeafe}
+  .small{font-size:12px;color:#cbd5e1;text-align:center;max-width:420px}
+  .hidden-mobile{display:none}
+  @media(min-width:700px){ .hidden-mobile{display:inline-block} h1{font-size:20px} canvas{aspect-ratio:9/16;max-width:520px} }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Dodge The Block — Galaxy (SDS)</h1>
+      <div style="display:flex;gap:8px;">
+        <button id="home" class="hidden-mobile">Home</button>
+        <button id="menu">Menu</button>
+      </div>
+    </header>
 
-// Dodge The Block - powerup images only (no boxes), larger, shadowed, life tilt animation
-// Requires images in /assets/: Bomb.png, Life.png, Shild.png
+    <canvas id="game" aria-label="game canvas"></canvas>
+
+    <div class="controls">
+      <button id="restart">Restart</button>
+      <button id="pause">Pause</button>
+      <button id="leader">Leaderboard</button>
+      <button id="connectSds">Connect SDS</button>
+    </div>
+
+    <div class="hud">
+      <div class="badge" id="status">Status: Ready</div>
+      <div class="badge">Level: <strong id="level">1</strong></div>
+      <div class="badge">Time: <strong id="levelTime">--</strong>s</div>
+      <div class="badge">Score: <strong id="score">0</strong></div>
+      <div class="badge">Lives: <strong id="lives">3</strong></div>
+      <div class="badge">Shild: <strong id="shield">0</strong></div>
+    </div>
+
+    <div class="small">Touch canvas to move (mobile). On PC use ←/→ or A/D. Power-ups use custom transparent sprites (no boxes).</div>
+  </div>
+
+<script>
+/* Dodge The Block — updated:
+ - item sprites used (assets/Bomb.png, assets/Life.png, assets/Shild.png)
+ - item size >= enemy size
+ - life rotates left-right
+ - shild effect on player (glow + scale)
+ - remove boxed item drawing
+ - enemies spread (avoid spawn near other enemies in same lane)
+ - keyboard controls for PC, responsive canvas
+*/
+
+const ASSET_PATH = 'assets/'; // ensure files in repo: assets/Bomb.png Life.png Shild.png
 
 const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
+const ctx = canvas.getContext('2d', { alpha: false });
+const restartBtn = document.getElementById('restart');
+const pauseBtn = document.getElementById('pause');
+const leaderBtn = document.getElementById('leader');
+const connectBtn = document.getElementById('connectSds');
+const statusEl = document.getElementById('status');
+const levelEl = document.getElementById('level');
+const levelTimeEl = document.getElementById('levelTime');
+const scoreEl = document.getElementById('score');
+const livesEl = document.getElementById('lives');
+const shieldEl = document.getElementById('shield');
 
+let W = 360, H = 640;
 function resizeCanvas(){
-  const padH = 140;
-  let W = Math.min(window.innerWidth - 24, 900);
-  let H = Math.min(window.innerHeight - padH, 1300);
-  if(window.innerWidth < 600) W = window.innerWidth - 20;
-  canvas.width = Math.max(320, W);
-  canvas.height = Math.max(420, H);
+  const maxW = Math.min(window.innerWidth - 28, 520);
+  const maxH = Math.min(window.innerHeight - 160, 1200);
+  const targetW = Math.max(320, maxW);
+  const targetH = Math.max(500, Math.round(targetW * (16/9)));
+  canvas.width = targetW;
+  canvas.height = Math.max(520, Math.min(maxH, targetH));
+  W = canvas.width; H = canvas.height;
+  initStars();
 }
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
-// CONFIG
+/* load images */
+const IMAGES = {};
+function loadImage(name, src){ return new Promise(res => { const i = new Image(); i.onload = ()=>{IMAGES[name]=i;res(i)}; i.src = src; }); }
+Promise.all([
+  loadImage('bomb', ASSET_PATH + 'Bomb.png'),
+  loadImage('life', ASSET_PATH + 'Life.png'),
+  loadImage('shild', ASSET_PATH + 'Shild.png'),
+]).then(()=>{ /* assets ready */ });
+
+/* state */
 const LANES = 4;
-const MAX_ENEMIES = 14;
-const POWERUP_CHANCE = 0.05;
-const MAX_POWERUPS = 1;
-const MIN_POWERUP_DIST = 140;
-
-// STATE
-let player = { w:44, h:44, x:0, y:0, vx:0, maxSpeed:12, accel:1.6, friction:0.86, shield:0 };
-let enemies=[], powerups=[], particles=[], stars=[];
-let score=0, lives=3, running=true, levelIndex=0, levelTimer=0;
-let spawnInterval = 820, fallbackTimer=0, lastFrame = Date.now();
-let assets = { bomb:null, life:null, shild:null };
-let assetsReady = false;
-
-// LEVELS
-const LEVELS = [
-  {duration:12, spawnInterval:900, speedMul:1.0},
-  {duration:15, spawnInterval:760, speedMul:1.12},
-  {duration:18, spawnInterval:640, speedMul:1.28},
-  {duration:22, spawnInterval:520, speedMul:1.45},
-  {duration:9999, spawnInterval:420, speedMul:1.8}
-];
-setLevel(0);
-
-// PRELOAD
-function loadImg(src){ return new Promise(res=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=()=>{ console.warn('img load fail',src); res(null); }; i.src=src; }); }
-
-async function preloadAll(){
-  const base = 'assets/';
-  const [bomb, life, shild] = await Promise.all([
-    loadImg(base + 'Bomb.png'),
-    loadImg(base + 'Life.png'),
-    loadImg(base + 'Shild.png')
-  ]);
-  assets.bomb = bomb;
-  assets.life = life;
-  assets.shild = shild;
-  // debug
-  console.log('assets loaded:', {
-    bomb: !!bomb, life: !!life, shild: !!shild
-  });
-  assetsReady = true;
-  resetGame();
+let lanesX = [];
+function computeLanes(){
+  lanesX = [];
+  const margin = Math.round(Math.max(26, W*0.06));
+  const usable = W - margin*2;
+  for(let i=0;i<LANES;i++) lanesX.push(Math.round(margin + usable*(i + 0.5)/LANES));
 }
-preloadAll();
+computeLanes();
 
-// STARS
-function initStars(){ stars=[]; const n = Math.max(40, Math.floor(canvas.width*0.05)); for(let i=0;i<n;i++) stars.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,r:Math.random()*1.6+0.6,alpha:0.15+Math.random()*0.85,speed:0.02+Math.random()*0.06}); }
+let player = {w:42,h:42,x:0,y:0,vx:0,maxSpeed:12,accel:1.6,friction:0.86,shild:0,shildTimer:0};
+let enemies = [], powerups = [], particles = [], stars = [];
+let score=0, lives=3, running=true, paused=false, levelIdx=0, levelTimer=120000;
+let spawnInterval = 820, spawnTimer = 0;
+
+/* stars */
+function initStars(){
+  stars=[];
+  const n = Math.max(30, Math.round(W*0.05));
+  for(let i=0;i<n;i++) stars.push({x:Math.random()*W, y:Math.random()*H, r: Math.random()*1.6+0.6, alpha:0.25+Math.random()*0.75, speed:0.01+Math.random()*0.06});
+}
 initStars();
 
-// LANES
-function computeLanes(){ const lanes=[]; const margin=28; const usable = canvas.width - margin*2; for(let i=0;i<LANES;i++) lanes.push(margin + usable * (i + 0.5) / LANES); return lanes; }
+/* levels */
+const LEVELS = [
+  {duration:12, spawn:900, speed:0.9},
+  {duration:18, spawn:760, speed:1.05},
+  {duration:24, spawn:620, speed:1.25},
+  {duration:40, spawn:520, speed:1.5},
+  {duration:9999, spawn:420, speed:1.9}
+];
+setLevel(0);
+function setLevel(i){
+  levelIdx = Math.min(i, LEVELS.length-1);
+  spawnInterval = LEVELS[levelIdx].spawn;
+  levelTimer = LEVELS[levelIdx].duration*1000;
+  levelEl.textContent = levelIdx+1;
+  statusEl.textContent = 'Status: Level ' + (levelIdx+1);
+}
 
-// HELPERS
-function setLevel(i){ levelIndex = Math.min(i, LEVELS.length-1); spawnInterval = LEVELS[levelIndex].spawnInterval; levelTimer = LEVELS[levelIndex].duration * 1000; document.getElementById('level').textContent = levelIndex+1; document.getElementById('levelTime').textContent = Math.ceil(levelTimer/1000); document.getElementById('status').textContent = 'Status: Level ' + (levelIndex+1); }
+/* helper collision */
+function rectIntersect(a,b, pad=6){
+  return !(a.x + a.w - pad < b.x || a.x > b.x + b.w - pad || a.y + a.h - pad < b.y || a.y > b.y + b.h - pad);
+}
 
-// SPAWN ENEMY (spread)
-let lastSpawnLane=-1, laneLastTime = new Array(LANES).fill(0);
+/* spawn enemy: ensure not too close to other enemies in same lane (vertical) */
 function spawnEnemy(){
-  if(enemies.length >= MAX_ENEMIES) return;
-  const lanes = computeLanes();
-  let tries=0;
-  let lane = Math.floor(Math.random()*LANES);
-  while(tries<10){
-    const now = Date.now();
-    if(lane !== lastSpawnLane && (now - laneLastTime[lane] > 350)) break;
-    lane = Math.floor(Math.random()*LANES); tries++;
-  }
-  lastSpawnLane = lane; laneLastTime[lane] = Date.now();
-  const laneX = lanes[lane];
-  const jitter = (Math.random()-0.5) * Math.min(26, canvas.width*0.03);
-  const x = Math.max(12, Math.min(laneX - 20 + jitter, canvas.width - 48));
-  const base = 2 + Math.random()*2.6;
-  const speed = base * LEVELS[levelIndex].speedMul;
-  const size = 18 + Math.random()*36;
-  const r = Math.random();
-  let type = 'red'; if(r<0.10) type='big'; else if(r<0.30) type='zig'; else if(r<0.45) type='home';
-  enemies.push({lane, x, y:-size, w:size, h:size, speed, ay:0.01 + Math.random()*0.03, type, phase:Math.random()*Math.PI*2, oscAmp:6+Math.random()*18, oscSpeed:0.004+Math.random()*0.01, trail:[]});
-}
-
-// SPAWN POWERUP (avoid close)
-function spawnPowerupAt(x,y){
-  if(powerups.length >= MAX_POWERUPS) return;
-  for(const p of powerups){
-    const dx = (p.x + p.w/2) - x; const dy = (p.y + p.h/2) - y;
-    if(Math.sqrt(dx*dx + dy*dy) < MIN_POWERUP_DIST) return;
-  }
-  const types = ['shild','life','bomb','score'];
-  const t = types[Math.floor(Math.random()*types.length)];
-  const size = Math.floor(Math.max(40, Math.min(canvas.width*0.08, 56)));
-  powerups.push({x:Math.max(8,Math.min(x, canvas.width - size - 8)), y, w:size, h:size, type:t, dy:1.6, created:Date.now()});
-}
-
-// TRAIL
-function addTrail(e){ e.trail = e.trail||[]; const tsize = Math.max(6, Math.round(e.w/4)); e.trail.push({x:e.x + e.w/2, y:e.y + e.h/2, age:0, life:360, col:(e.type==='big'?'#9fb0ff': e.type==='zig'?'#c77bff': e.type==='home'?'#ffb86b':'#ff6b6b'), size:tsize}); if(e.trail.length>12) e.trail.shift(); }
-function spawnParticles(x,y,col,count=10){ for(let i=0;i<count;i++) particles.push({x,y,vx:(Math.random()-0.5)*2, vy:(Math.random()-1.5)*-2, age:0, life:200+Math.random()*350, col}); }
-
-// INPUT (touch + hide arrows)
-let touchTarget = null;
-document.getElementById('left')?.style && (document.getElementById('left').style.display='none');
-document.getElementById('right')?.style && (document.getElementById('right').style.display='none');
-canvas.addEventListener('touchstart', e=>{ const t=e.touches[0]; touchTarget = t.clientX - canvas.getBoundingClientRect().left; e.preventDefault(); });
-canvas.addEventListener('touchmove', e=>{ const t=e.touches[0]; touchTarget = t.clientX - canvas.getBoundingClientRect().left; e.preventDefault(); });
-canvas.addEventListener('touchend', ()=> touchTarget = null);
-
-// FALLBACK SPAWN
-function fallbackStep(dt){
-  fallbackTimer += dt;
-  if(fallbackTimer > spawnInterval){
-    fallbackTimer = 0;
-    spawnEnemy();
-    if(Math.random() < POWERUP_CHANCE){
-      const lanes = computeLanes();
-      const lx = lanes[Math.floor(Math.random()*lanes.length)];
-      spawnPowerupAt(Math.max(16, Math.min(lx + (Math.random()-0.5)*40, canvas.width-40)), -28);
+  if(enemies.length >= 18) return;
+  computeLanes();
+  // try pick lane that is not too crowded
+  const attempts = 6;
+  for(let t=0;t<attempts;t++){
+    const lane = Math.floor(Math.random()*LANES);
+    const laneX = lanesX[lane];
+    // ensure no enemy in that lane within 160px from top (to avoid cluster)
+    let ok = true;
+    for(const e of enemies){
+      if(e.lane === lane && e.y < 160) { ok = false; break; }
     }
-    spawnInterval = Math.max(380, spawnInterval - 0.2);
+    if(!ok) continue;
+    const size = 18 + Math.random()*34; // enemy size variable
+    const x = laneX - size/2 + (Math.random()-0.5)*28;
+    const base = 1.6 + Math.random()*2.2;
+    const spd = base * LEVELS[levelIdx].speed;
+    const e = {
+      lane, x: Math.max(8, Math.min(W-size-8, x)), y:-size-10,
+      w:size, h:size, speed: spd, type: (Math.random()<0.12? 'big': (Math.random()<0.28?'zig':'std')),
+      phase: Math.random()*Math.PI*2, oscAmp: 6 + Math.random()*12, oscSpeed: 0.003+Math.random()*0.009,
+      trail:[]
+    };
+    enemies.push(e);
+    return;
+  }
+  // failed to place (lanes crowded) => skip spawn this tick
+}
+
+/* spawn powerup: ensure minimum distance from other powerups */
+function spawnPowerup(){
+  if(powerups.length >= 1) return;
+  const px = Math.random()*(W-60) + 20;
+  const py = -30;
+  // ensure not near other powerups horizontally
+  for(const p of powerups){
+    if(Math.abs(p.x - px) < 140) return;
+  }
+  // type
+  const types = ['shild','life','bombscore'];
+  const t = types[Math.floor(Math.random()*types.length)];
+  const size = 36; // bigger than enemies
+  powerups.push({x:px, y:py, w:size, h:size, type:t, rot:0, rotDir:Math.random()<0.5?1:-1});
+}
+
+/* particles for feedback */
+function spawnParticles(x,y,col,count=18){
+  for(let i=0;i<count;i++){
+    particles.push({
+      x,y,vx:(Math.random()-0.5)*3, vy:(Math.random()-1.5)*-2, age:0, life:300+Math.random()*400, col
+    });
   }
 }
 
-// UPDATE
-function update(dt){
-  for(const s of stars){ s.y += s.speed * dt * 0.02; if(s.y > canvas.height + 10) s.y = -10; }
+/* input */
+let touchTarget = null;
+canvas.addEventListener('touchstart', e=>{ const t=e.touches[0]; touchTarget = t.clientX - canvas.getBoundingClientRect().left; e.preventDefault();});
+canvas.addEventListener('touchmove', e=>{ const t=e.touches[0]; touchTarget = t.clientX - canvas.getBoundingClientRect().left; e.preventDefault();});
+canvas.addEventListener('touchend', ()=>{ touchTarget = null; });
 
+let leftKey=false, rightKey=false;
+document.addEventListener('keydown', e=>{
+  if(e.key==='ArrowLeft' || e.key==='a' || e.key==='A') leftKey=true;
+  if(e.key==='ArrowRight' || e.key==='d' || e.key==='D') rightKey=true;
+  if(e.key===' ') { paused = !paused; pauseBtn.textContent = paused? 'Resume':'Pause'; }
+});
+document.addEventListener('keyup', e=>{
+  if(e.key==='ArrowLeft' || e.key==='a' || e.key==='A') leftKey=false;
+  if(e.key==='ArrowRight' || e.key==='d' || e.key==='D') rightKey=false;
+});
+
+/* update */
+function update(dt){
+  if(paused || !running) return;
+  // stars
+  for(const s of stars){ s.y += s.speed * dt * 0.02; if(s.y > H+10) s.y = -10; }
+
+  // spawn logic
+  spawnTimer += dt;
+  if(spawnTimer > spawnInterval){
+    spawnTimer = 0;
+    // enemy spawn
+    if(Math.random() < 0.92) spawnEnemy();
+    // powerup rarer
+    if(Math.random() < 0.06) spawnPowerup();
+    // slowly reduce spawnInterval to increase difficulty
+    spawnInterval = Math.max(380, spawnInterval - 0.8);
+  }
+
+  // enemies movement & trails
   for(let i=enemies.length-1;i>=0;i--){
     const e = enemies[i];
-    const lanes = computeLanes();
-    const targetX = Math.max(8, Math.min(lanes[e.lane] - e.w/2, canvas.width - e.w - 8));
-    e.x += (targetX - e.x) * 0.06 + (Math.sin(e.phase*1.2) * 0.02 * (e.w*0.2));
+    const targetX = Math.max(8, Math.min(W - e.w - 8, lanesX[e.lane] - e.w/2));
+    e.x += (targetX - e.x) * 0.06; // lane re-center smoothing
     e.phase += e.oscSpeed * dt;
     const vOsc = Math.sin(e.phase) * e.oscAmp * 0.02;
-    e.speed += e.ay * (dt/16);
     e.y += e.speed * (dt/16) + vOsc;
-    if(Math.random() < 0.58) addTrail(e);
-    if(e.trail) for(const t of e.trail) t.age += dt;
-    if(rectIntersect(player, e) && running){ onPlayerHit(e); enemies.splice(i,1); continue; }
-    if(e.y > canvas.height + 140){ enemies.splice(i,1); score++; document.getElementById('score').textContent = score; }
+    // trail
+    if(Math.random() < 0.66) e.trail.push({x: e.x + e.w/2, y: e.y + e.h/2, age:0, life:300 + e.w*8, col: '#ff6b6b', size: Math.max(4, Math.round(e.w/4))});
+    if(e.trail.length > 14) e.trail.shift();
+    for(const t of e.trail) t.age += dt;
+
+    // collision with player
+    if(rectIntersect(player, e)){
+      onPlayerHit(e);
+      enemies.splice(i,1);
+      continue;
+    }
+    if(e.y > H + 120) { enemies.splice(i,1); score += 1; scoreEl.textContent = score; }
   }
 
+  // powerups
   for(let i=powerups.length-1;i>=0;i--){
-    const p=powerups[i]; p.y += p.dy * (dt/16);
-    if(rectIntersect(player, {x:p.x,y:p.y,w:p.w,h:p.h})){ applyPowerup(p.type); powerups.splice(i,1); continue; }
-    if(p.y > canvas.height + 140) powerups.splice(i,1);
+    const p = powerups[i];
+    p.y += 1.6 * (dt/16);
+    if(p.type === 'life') p.rot += 0.002 * p.rotDir * dt; // life rotation
+    if(rectIntersect(player, {x:p.x,y:p.y,w:p.w,h:p.h}, 4)){
+      applyPowerup(p.type);
+      powerups.splice(i,1);
+      continue;
+    }
+    if(p.y > H + 80) powerups.splice(i,1);
   }
 
-  for(let i=particles.length-1;i>=0;i--){
-    const t = particles[i]; t.age += dt; t.x += t.vx * dt * 0.02; t.y += t.vy * dt * 0.02; if(t.age > t.life) particles.splice(i,1);
-  }
-
-  if(levelTimer > 0){ levelTimer -= dt; document.getElementById('levelTime').textContent = Math.max(0, Math.ceil(levelTimer/1000)); if(levelTimer <= 0){ const next = Math.min(levelIndex + 1, LEVELS.length-1); setLevel(next); score += 8; document.getElementById('score').textContent = score; } }
-}
-
-// COLLISIONS & POWERUPS
-function rectIntersect(a,b){ const pad=6; return !(a.x + a.w - pad < b.x || a.x > b.x + b.w - pad || a.y + a.h - pad < b.y || a.y > b.y + b.h - pad); }
-function onPlayerHit(e){ if(player.shield>0){ player.shield--; document.getElementById('shield').textContent = player.shield; spawnParticles(player.x+player.w/2, player.y+player.h/2, '#9be7ff', 14); return; } lives--; document.getElementById('lives').textContent = lives; spawnParticles(player.x+player.w/2, player.y+player.h/2, '#ff6b6b', 20); if(lives<=0){ running=false; document.getElementById('status').textContent = 'GAME OVER'; } }
-function applyPowerup(t){
-  if(t==='shild'){ player.shield = Math.min(3, player.shield+1); document.getElementById('shield').textContent = player.shield; }
-  else if(t==='life'){ lives = Math.min(5, lives+1); document.getElementById('lives').textContent = lives; }
-  else if(t==='bomb'){ enemies = enemies.filter(x=> x.type === 'big'); spawnParticles(canvas.width/2, canvas.height/2, '#ffd36b', 40); }
-  else if(t==='score'){ score += 12; document.getElementById('score').textContent = score; }
-}
-
-// DRAW
-function drawBackground(){
-  const g = ctx.createLinearGradient(0,0,0,canvas.height);
-  g.addColorStop(0,'#020215'); g.addColorStop(0.5,'#071028'); g.addColorStop(1,'#041226');
-  ctx.fillStyle = g; ctx.fillRect(0,0,canvas.width,canvas.height);
-  for(const s of stars){ ctx.globalAlpha = s.alpha * 0.8; ctx.fillStyle='#eaf6ff'; ctx.fillRect(s.x,s.y,s.r,s.r); }
-  ctx.globalAlpha = 1;
-}
-
-function draw(){
-  drawBackground();
   // particles
-  for(const p of particles){ const a = 1 - (p.age / p.life); ctx.globalAlpha = Math.max(0,a); ctx.fillStyle = p.col; ctx.fillRect(p.x, p.y, 3, 3); ctx.globalAlpha = 1; }
-  // enemy trails
-  for(const e of enemies){
-    if(e.trail) for(const t of e.trail){
-      const a = 1 - (t.age / t.life); if(a<=0) continue;
-      ctx.save(); ctx.globalAlpha = Math.min(0.85, a*0.8); ctx.fillStyle=t.col; ctx.shadowBlur = Math.max(6, Math.round(e.w*0.6)); ctx.shadowColor = t.col;
-      const w = t.size*1.6, h = t.size*1.6; roundRect(t.x - w/2, t.y - h/2, w, h, Math.max(4, t.size/4), true);
-      ctx.restore();
-    }
-  }
-  // enemies
-  for(const e of enemies){
-    ctx.save(); ctx.shadowBlur = Math.max(12, Math.round(e.w*0.6));
-    if(e.type==='big'){ ctx.fillStyle='#33f3c2'; ctx.shadowColor='#33f3c2'; }
-    else if(e.type==='zig'){ ctx.fillStyle='#c377ff'; ctx.shadowColor='#c377ff'; }
-    else if(e.type==='home'){ ctx.fillStyle='#ffb86b'; ctx.shadowColor='#ffb86b'; }
-    else { ctx.fillStyle='#ff6b6b'; ctx.shadowColor='#ff6b6b'; }
-    roundRect(e.x, e.y, e.w, e.h, Math.max(6, e.w/6), true);
-    ctx.restore();
+  for(let i=particles.length-1;i>=0;i--){
+    const p = particles[i]; p.age += dt; p.x += p.vx * dt * 0.02; p.y += p.vy * dt * 0.02;
+    if(p.age > p.life) particles.splice(i,1);
   }
 
-  // powerups: draw ONLY images (no box)
-  const now = Date.now();
-  for(const p of powerups){
-    const cx = p.x + p.w/2, cy = p.y + p.h/2;
-    ctx.save();
-    // shadow under actual image
-    ctx.shadowColor = 'rgba(0,0,0,0.45)';
-    ctx.shadowBlur = Math.max(10, p.w * 0.35);
-    // choose image based on type
-    let img = null;
-    if(p.type === 'life') img = assets.life;
-    else if(p.type === 'shild') img = assets.shild;
-    else if(p.type === 'bomb') img = assets.bomb;
-    else img = assets.shild;
-    if(img){
-      // life: tilt L->R (rotate small)
-      if(p.type === 'life'){
-        const angle = Math.sin(now * 0.0025) * 0.22; // small tilt
-        ctx.translate(cx, cy);
-        ctx.rotate(angle);
-        const s = Math.min(canvas.width*0.10, p.w*1.05);
-        ctx.drawImage(img, -s/2, -s/2, s, s);
-      } else {
-        const s = Math.min(canvas.width*0.10, p.w*1.05);
-        ctx.drawImage(img, cx - s/2, cy - s/2, s, s);
-      }
-    } else {
-      // if image missing, draw NOTHING (so no box)
-      // debug marker to console once per missing type
-      if(!p._warned){ console.warn('missing asset for powerup type', p.type); p._warned = true; }
-    }
-    ctx.restore();
-  }
-
-  // player (with shield glow)
-  ctx.save();
-  if(player.shield>0){ ctx.shadowBlur=26; ctx.shadowColor='#7fe8ff'; }
-  else { ctx.shadowBlur=10; ctx.shadowColor='rgba(0,0,0,0.5)'; }
-  ctx.fillStyle = '#6bd7ff'; roundRect(player.x, player.y, player.w, player.h, 10, true);
-  ctx.restore();
-
-  ctx.fillStyle='#e6eef8'; ctx.font='14px sans-serif';
-  ctx.fillText('Time Lvl: ' + Math.max(0, Math.round(levelTimer/1000)) + 's', 12, 20);
-}
-
-function roundRect(x,y,w,h,r,fill,stroke){ if(typeof r==='undefined') r=6; ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); if(fill) ctx.fill(); if(stroke) ctx.stroke(); }
-
-// main loop
-function loop(){
-  const now = Date.now();
-  const dt = Math.min(60, now - lastFrame);
-  lastFrame = now;
-  if(assetsReady && running){ applyInput(); fallbackStep(dt); update(dt); }
-  draw();
-  requestAnimationFrame(loop);
-}
-
-// input movement (touch & PC keys)
-const keys = {};
-window.addEventListener('keydown', e=> keys[e.key] = true);
-window.addEventListener('keyup', e=> keys[e.key] = false);
-function applyInput(){
+  // player movement
   if(touchTarget != null){
     const target = touchTarget - player.w/2;
     const diff = target - player.x;
     player.vx += diff * 0.045;
   } else {
-    if(keys['ArrowLeft'] || keys['a']) player.vx -= player.accel * 1.2;
-    else if(keys['ArrowRight'] || keys['d']) player.vx += player.accel * 1.2;
+    if(leftKey && !rightKey) player.vx -= player.accel;
+    else if(rightKey && !leftKey) player.vx += player.accel;
     else player.vx *= player.friction;
     if(Math.abs(player.vx) < 0.02) player.vx = 0;
   }
   if(player.vx > player.maxSpeed) player.vx = player.maxSpeed;
   if(player.vx < -player.maxSpeed) player.vx = -player.maxSpeed;
   player.x += player.vx;
-  if(player.x < 8){ player.x=8; player.vx=0; }
-  if(player.x > canvas.width - player.w - 8){ player.x = canvas.width - player.w - 8; player.vx = 0; }
+  if(player.x < 8){ player.x = 8; player.vx = 0; }
+  if(player.x > W - player.w - 8){ player.x = W - player.w - 8; player.vx = 0; }
+
+  // shild timer decrease
+  if(player.shildTimer > 0){
+    player.shildTimer -= dt;
+    if(player.shildTimer <= 0) player.shild = 0;
+  }
+  levelTimer -= dt;
+  levelTimeEl.textContent = Math.max(0, Math.ceil(levelTimer/1000));
+  if(levelTimer <= 0){ setLevel(Math.min(LEVELS.length-1, levelIdx+1)); score += 6; scoreEl.textContent = score; }
 }
 
-// reset
+/* hit handling */
+function onPlayerHit(e){
+  if(player.shild > 0){
+    player.shild--;
+    shieldEl.textContent = player.shild;
+    spawnParticles(player.x + player.w/2, player.y + player.h/2, '#9be7ff', 16);
+    return;
+  }
+  lives--; livesEl.textContent = lives;
+  spawnParticles(player.x + player.w/2, player.y + player.h/2, '#ff6b6b', 26);
+  if(lives <= 0){ running = false; statusEl.textContent = 'GAME OVER'; }
+}
+
+/* powerup apply */
+function applyPowerup(t){
+  if(t==='shild'){ player.shild = Math.min(3, player.shild + 1); player.shildTimer = 8000; shieldEl.textContent = player.shild; spawnParticles(player.x + player.w/2, player.y, '#ffd36b', 14); }
+  else if(t==='life'){ lives = Math.min(5, lives + 1); livesEl.textContent = lives; spawnParticles(player.x + player.w/2, player.y, '#6ef07a', 18); }
+  else if(t==='bombscore'){ score += 12; scoreEl.textContent = score; spawnParticles(W/2, H/2, '#ffd36b', 32); }
+}
+
+/* draw helpers */
+function roundRectFill(x,y,w,h,r,color){
+  ctx.save(); ctx.fillStyle = color; roundRectPath(x,y,w,h,r); ctx.fill(); ctx.restore();
+}
+function roundRectPath(x,y,w,h,r){
+  ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+
+/* draw loop */
+function draw(){
+  // background gradient
+  const g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#020215'); g.addColorStop(0.5,'#071028'); g.addColorStop(1,'#041226');
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+
+  // stars
+  for(const s of stars){ ctx.globalAlpha = s.alpha*0.9; ctx.fillStyle = '#eaf6ff'; ctx.fillRect(s.x, s.y, s.r, s.r); }
+  ctx.globalAlpha = 1;
+
+  // enemies trails (neon blocks)
+  for(const e of enemies){
+    if(e.trail) for(const t of e.trail){
+      const a = 1 - (t.age/t.life); if(a<=0) continue;
+      ctx.save(); ctx.globalAlpha = Math.min(0.9, a*0.9);
+      ctx.fillStyle = t.col; ctx.shadowBlur = Math.max(6, Math.round(e.w*0.45)); ctx.shadowColor = t.col;
+      const w = t.size*1.9; const h = t.size*1.9;
+      ctx.fillRect(t.x - w/2, t.y - h/2, w, h);
+      ctx.restore();
+    }
+  }
+
+  // enemies
+  for(const e of enemies){
+    ctx.save();
+    // slight 3D shading on enemy using gradient
+    const eg = ctx.createLinearGradient(e.x, e.y, e.x+e.w, e.y+e.h);
+    if(e.type==='big'){ eg.addColorStop(0,'#46f6d0'); eg.addColorStop(1,'#1aa9a0'); ctx.shadowColor='#46f6d0'; }
+    else if(e.type==='zig'){ eg.addColorStop(0,'#e0b0ff'); eg.addColorStop(1,'#a055d6'); ctx.shadowColor='#c377ff'; }
+    else if(e.type==='home'){ eg.addColorStop(0,'#ffdba1'); eg.addColorStop(1,'#ffb86b'); ctx.shadowColor='#ffb86b'; }
+    else { eg.addColorStop(0,'#ffb1b1'); eg.addColorStop(1,'#ff6b6b'); ctx.shadowColor='#ff6b6b'; }
+    ctx.fillStyle = eg;
+    ctx.shadowBlur = Math.max(10, Math.round(e.w*0.6));
+    ctx.fillRect(e.x, e.y, e.w, e.h);
+    ctx.restore();
+  }
+
+  // powerups: draw image sprites with shadow; no boxed background
+  for(const p of powerups){
+    const cx = p.x + p.w/2;
+    const cy = p.y + p.h/2;
+    ctx.save();
+    // subtle shadow (same width as sprite)
+    ctx.shadowBlur = Math.max(10, Math.round(p.w*0.25));
+    ctx.shadowColor = 'rgba(0,0,0,0.6)';
+    // rotation for life item (left-right oscillation)
+    if(p.type==='life'){
+      const angle = Math.sin(p.rot) * 0.28; // -0.28..0.28 rad
+      ctx.translate(cx, cy);
+      ctx.rotate(angle);
+      ctx.drawImage(IMAGES['life'], -p.w/2, -p.h/2, p.w, p.h);
+    } else if(p.type==='shild'){
+      ctx.drawImage(IMAGES['shild'], p.x, p.y, p.w, p.h);
+    } else if(p.type==='bombscore'){
+      ctx.drawImage(IMAGES['bomb'], p.x, p.y, p.w, p.h);
+    }
+    ctx.restore();
+  }
+
+  // particles
+  for(const pt of particles){
+    const a = 1 - (pt.age/pt.life);
+    ctx.globalAlpha = Math.max(0, a);
+    ctx.fillStyle = pt.col; ctx.fillRect(pt.x, pt.y, 3, 3);
+    ctx.globalAlpha = 1;
+  }
+
+  // player -- slight 3D + shild glow effect
+  ctx.save();
+  if(player.shild > 0){
+    ctx.shadowBlur = 26; ctx.shadowColor = '#7fe8ff';
+  } else {
+    ctx.shadowBlur = 8; ctx.shadowColor = 'rgba(0,0,0,0.5)';
+  }
+  // 3D gradient for player box
+  const pg = ctx.createLinearGradient(player.x, player.y, player.x+player.w, player.y+player.h);
+  pg.addColorStop(0,'#6bd7ff'); pg.addColorStop(1,'#3bb6ff');
+  ctx.fillStyle = pg;
+  // add a slight scale if shield active
+  if(player.shild > 0){
+    ctx.translate(player.x + player.w/2, player.y + player.h/2);
+    ctx.scale(1.06, 1.06);
+    roundRectPath(-player.w/2, -player.h/2, player.w, player.h, 10); ctx.fill();
+  } else {
+    roundRectPath(player.x, player.y, player.w, player.h, 10); ctx.fill();
+  }
+  ctx.restore();
+
+  // HUD time text
+  ctx.fillStyle = '#e6eef8'; ctx.font = '14px sans-serif';
+  ctx.fillText('Time Lvl: ' + Math.max(0, Math.round(levelTimer/1000)) + 's', 12, 20);
+}
+
+/* game loop */
+let lastFrame = Date.now();
+function loop(){
+  const now = Date.now();
+  const dt = Math.min(60, now - lastFrame);
+  lastFrame = now;
+  if(running && !paused){
+    update(dt);
+  }
+  draw();
+  requestAnimationFrame(loop);
+}
+
+/* reset */
 function resetGame(){
   resizeCanvas();
-  player.x = canvas.width/2 - player.w/2; player.y = canvas.height - player.h - 18;
-  player.vx = 0; player.shield = 0;
-  enemies=[]; powerups=[]; particles=[]; initStars();
-  score = 0; lives = 3; running = true;
-  document.getElementById('score').textContent = score;
-  document.getElementById('lives').textContent = lives;
-  document.getElementById('shield').textContent = player.shield;
+  computeLanes();
+  player.x = W/2 - player.w/2; player.y = H - player.h - 18;
+  player.vx = 0; player.shild = 0; player.shildTimer = 0;
+  enemies = []; powerups = []; particles = [];
+  initStars();
+  score = 0; scoreEl.textContent = score;
+  lives = 3; livesEl.textContent = lives;
+  shieldEl.textContent = 0;
+  running = true; paused = false;
   setLevel(0);
-  spawnInterval = LEVELS[levelIndex].spawnInterval;
-  fallbackTimer = 0;
+  spawnInterval = LEVELS[levelIdx].spawn;
+  spawnTimer = 0;
+  statusEl.textContent = 'Status: Running';
 }
+restartBtn.addEventListener('click', resetGame);
+pauseBtn.addEventListener('click', ()=>{ paused = !paused; pauseBtn.textContent = paused? 'Resume':'Pause'; });
 
-// start after assets loaded
-(function waitForAssets(){ if(!assetsReady){ setTimeout(waitForAssets, 120); return; } for(let i=0;i<2;i++) spawnEnemy(); loop(); })();
+/* small API for debugging */
+window._spawnEnemy = spawnEnemy;
+window._spawnPowerup = spawnPowerup;
 
-window.spawnEnemyFromStream = spawnEnemy;
-window.spawnPowerup = spawnPowerupAt;
+resetGame(); loop();
+
+/* utilities */
+function roundRect(x,y,w,h,r, fill=true){ if(typeof r==='undefined') r=6; ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); if(fill) ctx.fill(); }
+</script>
+</body>
+</html>
