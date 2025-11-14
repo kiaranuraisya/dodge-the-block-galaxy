@@ -1,4 +1,4 @@
- // script.js (REPLACE whole file)
+ACE whole file)
 // Dodge The Block - powerup images only (no boxes), larger, shadowed, life tilt animation
 // Requires images in /assets/: Bomb.png, Life.png, Shild.png
 
