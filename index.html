@@ -5,57 +5,137 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Dodge The Block — Galaxy (SDS)</title>
   <link rel="stylesheet" href="styles.css">
-  <style>
-    /* fallback minimal styles so canvas shows */
-    html,body{height:100%;margin:0;background:linear-gradient(#041226,#020215 60%);}
-    .wrap{max-width:980px;margin:12px auto;padding:8px;color:#e6eef8;font-family:system-ui,Segoe UI,Roboto,Arial}
-    #gameContainer{display:flex;justify-content:center;align-items:flex-start}
-    canvas{display:block;border-radius:14px; box-shadow:0 8px 30px rgba(0,0,0,0.6); background:transparent; max-width:100%}
-    .controls{margin-top:10px; display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-    .controls button{background:#1aa; color:#002; border-radius:10px;padding:8px 12px;border:none;cursor:pointer}
-    .statusRow{margin-top:8px;color:#cfe9ff;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-    /* ensure left/right mobile arrows hidden if present */
-    #left, #right { display:none !important; }
-  </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>Dodge The Block — Galaxy (SDS)</h1>
-    <div id="gameContainer">
-      <!-- canvas must have id "game" -->
-      <canvas id="game" width="360" height="640"></canvas>
-    </div>
 
-    <div class="controls">
-      <button id="restartBtn">Restart</button>
-      <button id="pauseBtn">Pause</button>
-      <button id="leaderBtn">Leaderboard</button>
-      <button id="connectSdsBtn">Connect SDS</button>
+  <!-- LOADING -->
+  <div id="loadingScreen" class="overlay visible">
+    <div class="card cartoon">
+      <h1 class="logo">Dodge The Block</h1>
+      <div class="loaderBar">
+        <div id="loaderProgress" class="loaderFill"></div>
+      </div>
+      <p id="loaderText">Loading assets...</p>
     </div>
-
-    <div class="statusRow">
-      <span id="status">Status: Ready</span>
-      <span id="level">Level: 1</span>
-      <span id="levelTime">Time: -s</span>
-      <span id="score">Score: 0</span>
-      <span id="lives">Lives: 3</span>
-      <span id="shield">Shild: 0</span>
-    </div>
-
-    <p style="opacity:0.8;font-size:13px;margin-top:10px;">
-      Touch canvas to move (mobile). On PC use ←/→ or A/D. Power-ups use custom transparent sprites (no boxes).
-    </p>
   </div>
 
-  <!-- script harus di bawah, setelah canvas -->
+  <!-- MAIN MENU -->
+  <div id="mainMenu" class="overlay center hidden">
+    <div class="card cartoon large">
+      <h1>Dodge The Block <small>— Galaxy</small></h1>
+      <p class="muted">Avoid falling blocks. Collect power-ups. Survive as long as possible.</p>
+      <div class="menuButtons">
+        <button id="btnPlay" class="btn primary">Play</button>
+        <button id="btnProfile" class="btn">Profile</button>
+        <button id="btnHow" class="btn">How to Play</button>
+        <button id="btnSettings" class="btn">Settings</button>
+        <button id="btnLeaderboard" class="btn">Leaderboard</button>
+        <button id="btnConnect" class="btn">Connect Wallet</button>
+      </div>
+      <small class="muted">v1.0 — Cartoon Casual UI</small>
+    </div>
+  </div>
+
+  <!-- PROFILE -->
+  <div id="profilePanel" class="overlay center hidden">
+    <div class="card cartoon">
+      <h2>Player Profile</h2>
+      <label>Username</label>
+      <input id="profileName" type="text" placeholder="Your name" />
+      <div class="profileRow">
+        <div>Wallet: <span id="walletLabel">Not connected</span></div>
+        <div>Best: <span id="bestScore">0</span></div>
+      </div>
+      <div class="menuButtons">
+        <button id="saveProfile" class="btn primary">Save</button>
+        <button id="closeProfile" class="btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HOW TO PLAY -->
+  <div id="howPanel" class="overlay center hidden">
+    <div class="card cartoon">
+      <h2>How to Play</h2>
+      <ol class="howList">
+        <li>Touch canvas to move on mobile. On PC use ← / → or A / D.</li>
+        <li>Collect <strong>Life</strong> (green +) to gain 1 life; rotates slowly.</li>
+        <li>Collect <strong>Shield</strong> (gold badge) to gain a shield that blocks one hit.</li>
+        <li>Bomb clears some enemies when collected.</li>
+        <li>Avoid falling enemies — reach high score to level up.</li>
+      </ol>
+      <div class="menuButtons">
+        <button id="closeHow" class="btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div id="settingsPanel" class="overlay center hidden">
+    <div class="card cartoon">
+      <h2>Settings</h2>
+      <label><input id="optSound" type="checkbox" checked/> Sound</label>
+      <label><input id="optSfx" type="checkbox" checked/> SFX</label>
+      <label><input id="optVib" type="checkbox" /> Vibration (mobile)</label>
+      <label>Graphics:
+        <select id="optGraphics">
+          <option value="high">High</option>
+          <option value="low">Low</option>
+        </select>
+      </label>
+      <div class="menuButtons">
+        <button id="closeSettings" class="btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEADERBOARD (placeholder) -->
+  <div id="leaderboardPanel" class="overlay center hidden">
+    <div class="card cartoon">
+      <h2>Leaderboard</h2>
+      <div id="leaderboardList" class="leaderList">
+        <p class="muted">No online leaderboard connected. Local scores shown.</p>
+      </div>
+      <div class="menuButtons">
+        <button id="closeLeaderboard" class="btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CANVAS + HUD -->
+  <div class="gameWrap">
+    <header class="topbar cartoon">
+      <div class="title">Dodge The Block — Galaxy (SDS)</div>
+      <div id="walletTop" class="walletTag">Wallet: <span id="walletTopLabel">Not connected</span></div>
+    </header>
+
+    <main class="centerCanvas">
+      <canvas id="game" width="360" height="640"></canvas>
+      <!-- HUD under canvas -->
+      <div class="hudRow">
+        <div class="hudItem">Status: <span id="status">Ready</span></div>
+        <div class="hudItem">Level: <span id="level">1</span></div>
+        <div class="hudItem">Time: <span id="levelTime">-s</span></div>
+        <div class="hudItem">Score: <span id="score">0</span></div>
+        <div class="hudItem">Lives: <span id="lives">3</span></div>
+        <div class="hudItem">Shild: <span id="shield">0</span></div>
+      </div>
+      <div class="controlsRow">
+        <button id="btnRestart" class="btn small">Restart</button>
+        <button id="btnPause" class="btn small">Pause</button>
+        <button id="btnLeaderboard2" class="btn small">Leaderboard</button>
+        <button id="btnConnect2" class="btn small">Connect Wallet</button>
+      </div>
+      <div class="muted small">Touch canvas to move (mobile). On PC use ←/→ or A/D.</div>
+    </main>
+  </div>
+
+  <footer class="footer muted small">Touch canvas to move. Power-ups use custom transparent sprites (no boxes).</footer>
+
+  <!-- include your existing game script (do NOT remove) -->
   <script src="script.js"></script>
-  <script>
-    // wire some UI buttons quickly to existing functions
-    document.getElementById('restartBtn').addEventListener('click', ()=>{ if(window.resetGame) window.resetGame(); else location.reload(); });
-    document.getElementById('pauseBtn').addEventListener('click', ()=>{
-      if(window.running!==undefined){ window.running = !window.running; document.getElementById('status').textContent = window.running ? 'Status: Ready' : 'Status: Paused'; }
-    });
-    document.getElementById('connectSdsBtn').addEventListener('click', ()=> alert('SDS connect placeholder'));
-  </script>
+
+  <!-- UI script (paste this file as ui.js) -->
+  <script src="ui.js"></script>
 </body>
 </html>
