@@ -1,127 +1,510 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Dodge The Block — Compact Galaxy (SDS)</title>
-<link rel="stylesheet" href="styles.css">
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Dodge The Block — MAX + SDS</title>
 <style>
-  /* small inline styles so UI looks okay without external CSS */
-  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial; background:#041226; color:#e6eef8; }
-  .wrap{max-width:980px;margin:8px auto;padding:8px}
-  header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
-  header h1{font-size:20px;margin:0}
-  #walletLabel{font-size:13px;background:#04262f;padding:6px;border-radius:6px}
-  #gameWrap{display:flex;flex-direction:column;align-items:center}
-  canvas{background:transparent;border-radius:12px;box-shadow:0 8px 20px rgba(0,0,0,0.6);max-width:100%}
-  .hudRow{width:100%;display:flex;justify-content:center;gap:10px;margin-top:10px;flex-wrap:wrap}
-  .btn{background:#13bfa3;color:#022; padding:8px 14px;border-radius:10px;border:none;cursor:pointer}
-  .btn.small{padding:6px 10px}
-  footer{margin-top:8px;color:#cbd8e6;font-size:13px}
-  /* overlays */
-  .overlay{position:fixed;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(3,6,12,0.62);z-index:30}
-  .card{background:#071428;padding:18px;border-radius:12px;min-width:280px;color:#eaf6ff}
-  .hidden{display:none}
-  label{display:block;margin-top:8px;font-size:13px}
-  input[type="text"]{width:100%;padding:8px;border-radius:8px;border:1px solid #123}
-  .row{display:flex;gap:8px;margin-top:12px;justify-content:flex-end}
-  #loadingText{font-size:16px;margin-bottom:8px}
-  .infoSmall{font-size:12px;color:#b9cbdc}
-  /* leaderboard list */
-  .leaderList{max-height:220px;overflow:auto;margin-top:8px}
-  .leaderItem{padding:6px;border-bottom:1px solid rgba(255,255,255,0.03)}
+:root{--bg:#061423;--card:#0b1c2e;--accent:#19c39a;--muted:#9fb3c4}
+html,body{height:100%;margin:0;background:linear-gradient(180deg,#041226,#061623);color:#eaf6ff;font-family:Inter,Segoe UI,Roboto,Arial}
+.wrap{max-width:980px;margin:16px auto;padding:12px}
+header{display:flex;align-items:center;justify-content:space-between}
+h1{margin:0;font-size:20px}
+.btn{background:var(--accent);color:#012;padding:10px 14px;border-radius:12px;border:0;cursor:pointer;box-shadow:0 8px 20px rgba(0,0,0,0.45)}
+.gameCard{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.04)); border-radius:12px;padding:12px;margin-top:12px;box-shadow:inset 0 0 30px rgba(0,0,0,0.35)}
+canvas{display:block;width:100%;height:auto;border-radius:10px;box-shadow:0 16px 40px rgba(3,8,16,0.6);background:transparent;max-height:76vh}
+.hud{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.chip{background:#072433;padding:8px 12px;border-radius:999px;color:var(--muted);font-size:13px}
+.controls{margin-top:10px;display:flex;gap:10px;flex-wrap:wrap}
+.overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:9998}
+.hidden{display:none}
+.panel{background:var(--card);padding:18px;border-radius:12px;width:min(720px,96%);color:#eaf6ff;box-shadow:0 20px 60px rgba(0,0,0,0.6)}
+label{display:block;font-size:13px;margin-top:8px;color:var(--muted)}
+input[type=text]{width:100%;padding:8px 10px;border-radius:8px;border:0;background:#092233;color:#eaf6ff}
+.footer{margin-top:18px;color:var(--muted);text-align:center;font-size:13px}
+#loadingOverlay{position:fixed;left:0;top:0;width:100vw;height:100vh;background:rgba(0,0,0,0.66);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(3px)}
+.loaderBox{background:rgba(3,12,20,0.9);padding:16px 18px;border-radius:12px;text-align:center}
+.progress{height:8px;background:#0b2232;border-radius:8px;margin-top:10px;overflow:hidden;width:260px}
+.progress>i{display:block;height:100%;background:linear-gradient(90deg,#19c39a,#6cf2d0);width:0%}
+@media(min-width:900px){canvas{max-height:78vh}}
 </style>
 </head>
 <body>
+<!-- Loading -->
+<div id="loadingOverlay">
+  <div class="loaderBox">
+    <div style="font-weight:700">Loading images & preparing SDK...</div>
+    <div style="margin-top:8px;color:#9fb3c4;font-size:13px" id="loadingInfo">Starting</div>
+    <div class="progress"><i id="progressBar"></i></div>
+    <div style="margin-top:8px;color:#9fb3c4;font-size:13px" id="progressText">0 / 3</div>
+  </div>
+</div>
+
 <div class="wrap">
   <header>
-    <h1>Dodge The Block — Compact Galaxy (SDS)</h1>
-    <div id="walletLabel">Wallet: Not connected</div>
+    <div>
+      <h1>Dodge The Block — MAX (SDS-ready)</h1>
+      <div style="color:var(--muted);font-size:13px">Compact arcade — real-time stream integration (SDS)</div>
+    </div>
+    <div><button id="btnMenu" class="btn">Menu</button></div>
   </header>
 
-  <div id="gameWrap">
-    <div id="canvasCard" style="width:100%;max-width:520px;">
-      <canvas id="game" width="360" height="720"></canvas>
+  <div class="gameCard">
+    <canvas id="game" width="520" height="880"></canvas>
+
+    <div class="hud">
+      <div class="chip" id="status">Status: Ready</div>
+      <div class="chip">Level: <span id="level">1</span></div>
+      <div class="chip">Time: <span id="levelTime">-</span>s</div>
+      <div class="chip">Score: <span id="score">0</span></div>
+      <div class="chip">Lives: <span id="lives">3</span></div>
+      <div class="chip">Shild: <span id="shield">0</span></div>
+      <div style="flex:1"></div>
+      <div class="chip" id="walletStatus">Wallet: Not connected</div>
+      <div class="chip" id="sdsStatus">SDS: Disconnected</div>
     </div>
 
-    <div class="hudRow">
-      <div id="status">Status: Ready</div>
-      <div>Level: <span id="level">1</span></div>
-      <div>Time: <span id="levelTime">-</span></div>
-      <div>Score: <span id="score">0</span></div>
-      <div>Lives: <span id="lives">3</span></div>
-      <div>Shild: <span id="shield">0</span></div>
-    </div>
-
-    <div class="hudRow" style="margin-top:12px">
-      <button class="btn" id="btnRestart">Restart</button>
-      <button class="btn" id="btnPause">Pause</button>
-      <button class="btn" id="btnLeaderboard">Leaderboard</button>
-      <button class="btn" id="btnConnect">Connect Wallet</button>
-      <button class="btn" id="btnMenu">Menu</button>
-    </div>
-
-    <footer class="infoSmall">Touch canvas to move (mobile). On PC use ←/→ or A/D. Power-ups use custom transparent sprites (no boxes).</footer>
-  </div>
-</div>
-
-<!-- LOADING OVERLAY -->
-<div id="loadingOverlay" class="overlay">
-  <div class="card" style="text-align:center;min-width:300px">
-    <div id="loadingText">Loading images...</div>
-    <div class="infoSmall">Preparing game assets. Please wait.</div>
-  </div>
-</div>
-
-<!-- MAIN MENU -->
-<div id="mainMenu" class="overlay hidden">
-  <div class="card">
-    <h3>Welcome — Dodge The Block</h3>
-    <p class="infoSmall">Avoid falling enemies. Collect power-ups. Connect wallet to enable SDS demo features.</p>
-    <div class="row">
-      <button class="btn" id="menuStart">Play</button>
-      <button class="btn" id="menuProfile">Profile</button>
-      <button class="btn" id="menuSettings">Settings</button>
+    <div class="controls">
+      <button id="btnRestart" class="btn">Restart</button>
+      <button id="btnPause" class="btn">Pause</button>
+      <button id="btnLeader" class="btn">Leaderboard</button>
+      <button id="btnConnect" class="btn">Connect Wallet</button>
+      <button id="btnSDS" class="btn">Connect SDS</button>
     </div>
   </div>
+
+  <div class="footer">Touch canvas to move. On PC use ← → / A D. Power-ups use custom transparent sprites.</div>
 </div>
 
-<!-- PROFILE -->
-<div id="profilePanel" class="overlay hidden">
-  <div class="card">
-    <h3>Player Profile</h3>
-    <label>Name</label>
-    <input id="profileName" type="text" placeholder="Your name" />
-    <div class="row">
-      <button class="btn" id="saveProfile">Save</button>
-      <button class="btn" id="closeProfile">Close</button>
-    </div>
+<!-- Overlays -->
+<div id="menuOverlay" class="overlay hidden"><div class="panel">
+  <h3>Menu</h3>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button id="openProfile" class="btn">Profile</button>
+    <button id="openHow" class="btn">How to play</button>
+    <button id="openSettings" class="btn">Settings</button>
+    <button id="closeMenu" class="btn" style="background:#ff7b6b">Close</button>
   </div>
-</div>
+  <p style="color:var(--muted);margin-top:10px">SDS: when connected will push events to spawn enemies/powerups in real-time.</p>
+</div></div>
 
-<!-- SETTINGS -->
-<div id="settingsPanel" class="overlay hidden">
-  <div class="card">
-    <h3>Settings</h3>
-    <label><input id="optSound" type="checkbox" checked /> Sound</label>
-    <label><input id="optVib" type="checkbox" /> Vibration (mobile)</label>
-    <div class="row">
-      <button class="btn" id="closeSettings">Close</button>
-    </div>
-  </div>
-</div>
+<div id="profileOverlay" class="overlay hidden"><div class="panel">
+  <h3>Profile</h3>
+  <label>Name</label><input id="profileName" type="text" placeholder="Player name">
+  <label>Bio</label><input id="profileBio" type="text" placeholder="Short bio">
+  <div style="margin-top:12px;text-align:right"><button id="saveProfile" class="btn">Save</button> <button id="closeProfile" class="btn" style="background:#ff7b6b">Close</button></div>
+</div></div>
 
-<!-- LEADERBOARD -->
-<div id="leaderPanel" class="overlay hidden">
-  <div class="card">
-    <h3>Leaderboard — Local</h3>
-    <div class="leaderList" id="leaderList"></div>
-    <div class="row">
-      <button class="btn" id="closeLeader">Close</button>
-    </div>
-  </div>
-</div>
+<div id="howOverlay" class="overlay hidden"><div class="panel">
+  <h3>How to play</h3>
+  <ul>
+    <li>Avoid falling enemies. Move left/right to dodge.</li>
+    <li>Pick <strong>Life</strong> to gain a life (green + rotating).</li>
+    <li>Pick <strong>Shild</strong> to get temporary shield (blocks 1 hit).</li>
+    <li>Bomb clears many smaller enemies.</li>
+  </ul>
+  <div style="text-align:right"><button id="closeHow" class="btn">Close</button></div>
+</div></div>
 
-<script src="script.js"></script>
+<div id="leaderOverlay" class="overlay hidden"><div class="panel">
+  <h3>Leaderboard (local)</h3>
+  <ol id="leaderList"></ol>
+  <div style="text-align:right"><button id="closeLeader" class="btn">Close</button></div>
+</div></div>
+
+<div id="settingsOverlay" class="overlay hidden"><div class="panel">
+  <h3>Settings</h3>
+  <label><input id="optSound" type="checkbox" checked> Sound</label>
+  <label><input id="optSfx" type="checkbox" checked> SFX</label>
+  <label>Graphics
+    <select id="optGraphics"><option value="high">High</option><option value="mid">Medium</option><option value="low">Low</option></select>
+  </label>
+  <div style="text-align:right;margin-top:12px"><button id="closeSettings" class="btn">Close</button></div>
+</div></div>
+
+<!-- GAME SCRIPT with SDS-ready integration -->
+<script>
+/*
+  Dodge The Block — MAX + SDS-ready
+  - Exposes window.spawnEnemyFromStream(payload) and spawnPowerupFromStream(payload)
+  - connectSDS() will attempt to use SDK if installed by developer (see README comment below)
+  - If SDK not available in browser bundle, connectSDS shows instructions to wire SDK in your build (recommended for production)
+*/
+
+/* ------------------ DOM helpers ------------------ */
+const $ = id => document.getElementById(id);
+const loadingOverlay = $('loadingOverlay'), progressBar = $('progressBar'), progressText = $('progressText'), loadingInfo = $('loadingInfo');
+
+/* ------------------ canvas resize ------------------ */
+const canvas = $('game'), ctx = canvas.getContext('2d');
+function resizeCanvas(){
+  const padH = 140;
+  let W = Math.min(window.innerWidth - 24, 900);
+  let H = Math.min(window.innerHeight - padH, 1300);
+  if(window.innerWidth < 600) W = window.innerWidth - 20;
+  canvas.width = Math.max(320, W);
+  canvas.height = Math.max(480, H);
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+/* ------------------ preload assets ------------------ */
+const assetPaths = { bomb:'assets/Bomb.png', life:'assets/Life.png', shild:'assets/Shild.png' };
+let assets = { bomb:null, life:null, shild:null };
+let assetsLoadedCount = 0;
+function loadImageAsync(src){ return new Promise((res)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=()=>res(null); i.src=src; }); }
+
+async function preloadAll(){
+  loadingInfo.textContent = 'Loading images';
+  const keys = Object.keys(assetPaths);
+  for(let i=0;i<keys.length;i++){
+    const k = keys[i];
+    const p = assetPaths[k];
+    assets[k] = await loadImageAsync(p);
+    assetsLoadedCount++;
+    const pct = Math.round(assetsLoadedCount / keys.length * 100);
+    progressBar.style.width = pct + '%';
+    progressText.textContent = assetsLoadedCount + ' / ' + keys.length;
+  }
+  // done: keep loading overlay until SDK attempt completes
+}
+preloadAll();
+
+/* ------------------ GAME STATE ------------------ */
+const LANES = 4;
+const LEVELS = [
+  {duration:12, spawnInterval:900, speedMul:1.0},
+  {duration:15, spawnInterval:760, speedMul:1.12},
+  {duration:18, spawnInterval:640, speedMul:1.28},
+  {duration:22, spawnInterval:520, speedMul:1.45},
+  {duration:9999, spawnInterval:420, speedMul:1.8}
+];
+
+let player = { w:44, h:36, x:0, y:0, vx:0, maxSpeed:12, accel:1.6, friction:0.86, shield:0 };
+let enemies=[], powerups=[], particles=[], stars=[];
+let score=0, lives=3, running=true, levelIndex=0, levelTimer=0;
+let spawnInterval=820, fallbackTimer=0, lastFrame=Date.now();
+let lastSpawnLane=-1, laneLastTime = new Array(LANES).fill(0);
+let assetsReady=false;
+
+/* ------------------ helpers ------------------ */
+function computeLanes(){ const lanes=[]; const margin=28; const usable = canvas.width - margin*2; for(let i=0;i<LANES;i++) lanes.push(margin + usable * (i + 0.5) / LANES); return lanes; }
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+function rand(min,max){ return min + Math.random()*(max-min); }
+
+/* ------------------ stars ------------------ */
+function initStars(){ stars=[]; const n = Math.max(36, Math.floor(canvas.width*0.05)); for(let i=0;i<n;i++) stars.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,r:Math.random()*1.6+0.5,alpha:0.12+Math.random()*0.8,speed:0.02+Math.random()*0.06}); }
+initStars();
+
+/* ------------------ level / spawn ------------------ */
+function setLevel(i){
+  levelIndex = Math.min(i, LEVELS.length-1);
+  spawnInterval = LEVELS[levelIndex].spawnInterval;
+  levelTimer = LEVELS[levelIndex].duration * 1000;
+  $('level').textContent = levelIndex+1;
+  $('levelTime').textContent = Math.ceil(levelTimer/1000);
+  $('status').textContent = 'Status: Level ' + (levelIndex+1);
+}
+
+/* spawn functions (exposed for SDS events) */
+function spawnEnemyAtLane(laneIndex, opts){
+  const lanes = computeLanes();
+  const chosen = clamp(Math.round(laneIndex||0),0,LANES-1);
+  const laneX = lanes[chosen];
+  const jitter = (Math.random()-0.5) * Math.min(36, canvas.width*0.04);
+  const x = clamp(laneX - 20 + jitter, 12, canvas.width - 48);
+  const base = 2 + Math.random()*2.6;
+  const speed = base * LEVELS[levelIndex].speedMul * (opts && opts.speedMul ? opts.speedMul : 1);
+  const size = clamp((opts && opts.size) ? opts.size : (18 + Math.random()*36), 14, 80);
+  const r = Math.random();
+  let type = 'red'; if(r<0.10) type='big'; else if(r<0.30) type='zig'; else if(r<0.45) type='home';
+  enemies.push({lane:chosen, x, y:-size, w:size, h:size, speed, ay:0.01 + Math.random()*0.03, type, phase:Math.random()*Math.PI*2, oscAmp:6+Math.random()*18, oscSpeed:0.004+Math.random()*0.01, trail:[]});
+}
+function spawnEnemy(){ 
+  const lanes = computeLanes();
+  let playerLaneIndex = 0;
+  let best = 1e9;
+  lanes.forEach((lx,i)=>{ const d = Math.abs((player.x+player.w/2)-lx); if(d<best){best=d; playerLaneIndex=i;}});
+  if(Math.random() < 0.6){
+    const delta = (Math.random() < 0.7) ? 0 : (Math.random() < 0.5 ? -1 : 1);
+    spawnEnemyAtLane(clamp(playerLaneIndex + delta, 0, LANES-1));
+  } else {
+    spawnEnemyAtLane(Math.floor(Math.random()*LANES));
+  }
+}
+
+function spawnPowerupAt(x,y){
+  if(powerups.length >= 1) return;
+  for(const p of powerups){ const dx = (p.x + p.w/2) - x; const dy = (p.y + p.h/2) - y; if(Math.sqrt(dx*dx + dy*dy) < 120) return; }
+  const types = ['shild','life','bomb'];
+  const t = types[Math.floor(Math.random()*types.length)];
+  const size = Math.floor(Math.max(44, Math.min(canvas.width*0.09, 64)));
+  powerups.push({x:clamp(x,8,canvas.width-size-8), y, w:size, h:size, type:t, dy:1.6, created:Date.now()});
+}
+function spawnPowerupRandom(){ const lanes = computeLanes(); const lx = lanes[Math.floor(Math.random()*lanes.length)]; spawnPowerupAt(clamp(lx + (Math.random()-0.5)*40,16,canvas.width-40), -28); }
+
+/* expose hooks for external SDS events */
+window.spawnEnemyFromStream = function(payload){
+  const lane = payload && typeof payload.lane === 'number' ? payload.lane : Math.floor(Math.random()*LANES);
+  spawnEnemyAtLane(lane, payload || {});
+};
+window.spawnPowerupFromStream = function(payload){
+  if(payload && typeof payload.x === 'number'){ spawnPowerupAt(payload.x, payload.y||-28); return; }
+  if(payload && typeof payload.lane === 'number'){ const lanes = computeLanes(); spawnPowerupAt(clamp(lanes[payload.lane],16,canvas.width-40), payload.y||-28); return; }
+  spawnPowerupRandom();
+};
+
+/* ------------------ collision & powerups ------------------ */
+function rectIntersect(a,b){ const pad=6; return !(a.x + a.w - pad < b.x || a.x > b.x + b.w - pad || a.y + a.h - pad < b.y || a.y > b.y + b.h - pad); }
+function spawnParticles(x,y,col,count=10){ for(let i=0;i<count;i++) particles.push({x,y,vx:(Math.random()-0.5)*2, vy:(Math.random()-1.5)*-2, age:0, life:200+Math.random()*300, col}); }
+
+function onPlayerHit(e){
+  if(player.shield>0){ player.shield--; $('shield').textContent = player.shield; spawnParticles(player.x+player.w/2, player.y+player.h/2, '#9be7ff', 12); return; }
+  lives--; $('lives').textContent = lives; spawnParticles(player.x+player.w/2, player.y+player.h/2, '#ff6b6b', 20);
+  if(lives<=0){ running=false; $('status').textContent = 'GAME OVER'; saveScore(score); }
+}
+
+function applyPowerup(t){
+  if(t==='shild'){ player.shield = Math.min(3, player.shield+1); $('shield').textContent = player.shield; }
+  else if(t==='life'){ lives = Math.min(5, lives+1); $('lives').textContent = lives; }
+  else if(t==='bomb'){ enemies = enemies.filter(x=> x.type === 'big'); spawnParticles(canvas.width/2, canvas.height/2, '#ffd36b', 40); score += 6; $('score').textContent = score; }
+}
+
+/* ------------------ draw ------------------ */
+function roundRect(x,y,w,h,r,fill){ if(typeof r==='undefined') r=6; ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); if(fill) ctx.fill(); }
+function drawBackground(){
+  const g = ctx.createLinearGradient(0,0,0,canvas.height); g.addColorStop(0,'#020215'); g.addColorStop(0.5,'#071028'); g.addColorStop(1,'#041226'); ctx.fillStyle = g; ctx.fillRect(0,0,canvas.width,canvas.height);
+  for(const s of stars){ ctx.globalAlpha = s.alpha * 0.8; ctx.fillStyle='#eaf6ff'; ctx.fillRect(s.x,s.y,s.r,s.r); } ctx.globalAlpha = 1;
+}
+function draw(){
+  drawBackground();
+  for(const p of particles){ const a = 1 - (p.age / p.life); ctx.globalAlpha = Math.max(0,a); ctx.fillStyle = p.col; ctx.fillRect(p.x, p.y, 3, 3); ctx.globalAlpha = 1; }
+  for(const e of enemies){
+    if(e.trail) for(const t of e.trail){ const a = 1 - (t.age / t.life); if(a<=0) continue; ctx.save(); ctx.globalAlpha = Math.min(0.85,a*0.8); ctx.fillStyle=t.col; ctx.shadowBlur = Math.max(6, Math.round(e.w*0.6)); ctx.shadowColor=t.col; roundRect(t.x - t.size/2, t.y - t.size/2, t.size, t.size, Math.max(4, t.size/4)); ctx.restore(); }
+    ctx.save(); ctx.shadowBlur = Math.max(12, Math.round(e.w*0.6));
+    if(e.type==='big'){ ctx.fillStyle='#33f3c2'; ctx.shadowColor='#33f3c2'; }
+    else if(e.type==='zig'){ ctx.fillStyle='#c377ff'; ctx.shadowColor='#c377ff'; }
+    else if(e.type==='home'){ ctx.fillStyle='#ffb86b'; ctx.shadowColor='#ffb86b'; }
+    else { ctx.fillStyle='#ff6b6b'; ctx.shadowColor='#ff6b6b'; }
+    roundRect(e.x, e.y, e.w, e.h, Math.max(6, e.w/6));
+    ctx.restore();
+  }
+  // powerups (images)
+  const now = Date.now();
+  for(const p of powerups){
+    const cx = p.x + p.w/2, cy = p.y + p.h/2; ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = Math.max(10, p.w * 0.35);
+    let img = (p.type==='life') ? assets.life : (p.type==='shild') ? assets.shild : assets.bomb;
+    if(img){ if(p.type==='life'){ const angle = Math.sin(now * 0.0025) * 0.22; ctx.translate(cx,cy); ctx.rotate(angle); const s = Math.min(canvas.width*0.10, p.w*1.05); ctx.drawImage(img, -s/2, -s/2, s, s); } else { const s = Math.min(canvas.width*0.10, p.w*1.05); ctx.drawImage(img, cx - s/2, cy - s/2, s, s); } }
+    ctx.restore();
+  }
+  // player
+  ctx.save(); if(player.shield>0){ ctx.shadowBlur=26; ctx.shadowColor='#7fe8ff'; } else { ctx.shadowBlur=10; ctx.shadowColor='rgba(0,0,0,0.5)'; } ctx.fillStyle = '#6bd7ff'; roundRect(player.x, player.y, player.w, player.h, 10); ctx.restore();
+  ctx.fillStyle='#e6eef8'; ctx.font='14px sans-serif'; ctx.fillText('Time Lvl: ' + Math.max(0, Math.round(levelTimer/1000)) + 's', 12, 20);
+}
+
+/* ------------------ update ------------------ */
+function addTrail(e){ e.trail = e.trail||[]; const tsize = Math.max(6, Math.round(e.w/4)); e.trail.push({x:e.x + e.w/2, y:e.y + e.h/2, age:0, life:360, col:(e.type==='big'?'#9fb0ff': e.type==='zig'?'#c77bff': e.type==='home'?'#ffb86b':'#ff6b6b'), size:tsize}); if(e.trail.length>12) e.trail.shift(); }
+
+function update(dt){
+  for(const s of stars){ s.y += s.speed * dt * 0.02; if(s.y > canvas.height + 10) s.y = -10; }
+  for(let i=enemies.length-1;i>=0;i--){
+    const e = enemies[i];
+    const lanes = computeLanes();
+    const targetX = clamp(lanes[e.lane] - e.w/2, 8, canvas.width - e.w - 8);
+    e.x += (targetX - e.x) * 0.06 + (Math.sin(e.phase*1.2) * 0.02 * (e.w*0.2));
+    e.phase += e.oscSpeed * dt;
+    const vOsc = Math.sin(e.phase) * e.oscAmp * 0.02;
+    e.speed += e.ay * (dt/16);
+    e.y += e.speed * (dt/16) + vOsc;
+    if(Math.random() < 0.58) addTrail(e);
+    if(e.trail) for(const t of e.trail) t.age += dt;
+    if(rectIntersect(player, e) && running){ onPlayerHit(e); enemies.splice(i,1); continue; }
+    if(e.y > canvas.height + 140){ enemies.splice(i,1); score++; $('score').textContent = score; }
+  }
+
+  for(let i=powerups.length-1;i>=0;i--){
+    const p = powerups[i]; p.y += p.dy * (dt/16);
+    if(rectIntersect(player, {x:p.x,y:p.y,w:p.w,h:p.h})){ applyPowerup(p.type); powerups.splice(i,1); continue; }
+    if(p.y > canvas.height + 140) powerups.splice(i,1);
+  }
+
+  for(let i=particles.length-1;i>=0;i--){
+    const t = particles[i]; t.age += dt; t.x += t.vx * dt * 0.02; t.y += t.vy * dt * 0.02; if(t.age > t.life) particles.splice(i,1);
+  }
+
+  if(levelTimer > 0){ levelTimer -= dt; $('levelTime').textContent = Math.max(0, Math.ceil(levelTimer/1000)); if(levelTimer <= 0){ const next = Math.min(levelIndex + 1, LEVELS.length-1); setLevel(next); score += 8; $('score').textContent = score; } }
+}
+
+/* ------------------ fallback spawn ------------------ */
+function fallbackStep(dt){
+  fallbackTimer += dt;
+  if(fallbackTimer > spawnInterval){
+    fallbackTimer = 0;
+    const lanes = computeLanes();
+    let playerLaneIndex = 0, best = 1e9;
+    lanes.forEach((lx,i)=>{ const d = Math.abs((player.x+player.w/2)-lx); if(d<best){best=d; playerLaneIndex=i;}});
+    if(Math.random() < 0.6){
+      const choice = clamp(playerLaneIndex + (Math.random()<0.6?0:(Math.random()<0.5?-1:1)), 0, LANES-1);
+      const laneX = lanes[choice];
+      const jitter = (Math.random()-0.5) * Math.min(36, canvas.width*0.04);
+      const x = clamp(laneX - 20 + jitter, 12, canvas.width-48);
+      const base = 2 + Math.random()*2.6;
+      const speed = base * LEVELS[levelIndex].speedMul;
+      const size = 18 + Math.random()*36;
+      const r = Math.random();
+      let type = 'red'; if(r<0.10) type='big'; else if(r<0.30) type='zig'; else if(r<0.45) type='home';
+      enemies.push({lane:choice,x,y:-size,w:size,h:size,speed,ay:0.01+Math.random()*0.03,type,phase:Math.random()*Math.PI*2,oscAmp:6+Math.random()*18,oscSpeed:0.004+Math.random()*0.01,trail:[]});
+    } else {
+      spawnEnemy();
+    }
+
+    if(Math.random() < 0.14) spawnPowerupRandom();
+    spawnInterval = Math.max(380, spawnInterval - 0.4);
+  }
+}
+
+/* ------------------ input ------------------ */
+let touchTarget=null;
+canvas.addEventListener('touchstart', e=>{ const t=e.touches[0]; touchTarget = t.clientX - canvas.getBoundingClientRect().left; e.preventDefault(); });
+canvas.addEventListener('touchmove', e=>{ const t=e.touches[0]; touchTarget = t.clientX - canvas.getBoundingClientRect().left; e.preventDefault(); });
+canvas.addEventListener('touchend', ()=> touchTarget = null);
+const keys={};
+window.addEventListener('keydown', e=> keys[e.key]=true);
+window.addEventListener('keyup', e=> keys[e.key]=false);
+
+function applyInput(){
+  if(touchTarget != null){
+    const target = touchTarget - player.w/2;
+    const diff = target - player.x;
+    player.vx += diff * 0.045;
+  } else {
+    if(keys['ArrowLeft'] || keys['a']) player.vx -= player.accel * 1.2;
+    else if(keys['ArrowRight'] || keys['d']) player.vx += player.accel * 1.2;
+    else player.vx *= player.friction;
+    if(Math.abs(player.vx) < 0.02) player.vx = 0;
+  }
+  if(player.vx > player.maxSpeed) player.vx = player.maxSpeed;
+  if(player.vx < -player.maxSpeed) player.vx = -player.maxSpeed;
+  player.x += player.vx;
+  if(player.x < 8){ player.x=8; player.vx=0; }
+  if(player.x > canvas.width - player.w - 8){ player.x = canvas.width - player.w - 8; player.vx = 0; }
+}
+
+/* ------------------ reset / loop ------------------ */
+function resetGame(){
+  resizeCanvas();
+  player.x = canvas.width/2 - player.w/2; player.y = canvas.height - player.h - 18;
+  player.vx = 0; player.shield = 0;
+  enemies=[]; powerups=[]; particles=[]; initStars();
+  score = 0; lives = 3; running = true;
+  $('score').textContent = score; $('lives').textContent = lives; $('shield').textContent = player.shield;
+  setLevel(0);
+  spawnInterval = LEVELS[levelIndex].spawnInterval;
+  fallbackTimer = 0;
+}
+
+function loop(){
+  const now = Date.now();
+  const dt = Math.min(60, now - lastFrame);
+  lastFrame = now;
+  if(assetsReady && running){ applyInput(); fallbackStep(dt); update(dt); }
+  draw();
+  requestAnimationFrame(loop);
+}
+
+/* ------------------ score / leader ------------------ */
+function saveScore(s){
+  const name = localStorage.getItem('playerName') || 'Player';
+  const scores = JSON.parse(localStorage.getItem('scores_v1') || '[]');
+  scores.push({name,score:s,date:Date.now()});
+  scores.sort((a,b)=>b.score-a.score);
+  localStorage.setItem('scores_v1', JSON.stringify(scores.slice(0,12)));
+  renderLeaderboard();
+}
+function renderLeaderboard(){ const list = $('leaderList'); const scores = JSON.parse(localStorage.getItem('scores_v1') || '[]'); list.innerHTML = scores.length ? scores.map(s=>`<li>${s.name} — ${s.score}</li>`).join('') : '<div style="color:var(--muted)">No scores yet</div>'; }
+
+/* ------------------ UI Buttons ------------------ */
+$('btnMenu').addEventListener('click', ()=> $('menuOverlay').classList.toggle('hidden'));
+$('closeMenu').addEventListener('click', ()=> $('menuOverlay').classList.add('hidden'));
+$('openProfile').addEventListener('click', ()=>{ $('menuOverlay').classList.add('hidden'); $('profileOverlay').classList.remove('hidden'); $('profileName').value = localStorage.getItem('playerName') || ''; $('profileBio').value = localStorage.getItem('playerBio') || ''; });
+$('closeProfile').addEventListener('click', ()=> $('profileOverlay').classList.add('hidden'));
+$('saveProfile').addEventListener('click', ()=>{ localStorage.setItem('playerName', $('profileName').value || 'Player'); localStorage.setItem('playerBio', $('profileBio').value || ''); $('profileOverlay').classList.add('hidden'); });
+
+$('openHow').addEventListener('click', ()=>{ $('menuOverlay').classList.add('hidden'); $('howOverlay').classList.remove('hidden'); });
+$('closeHow').addEventListener('click', ()=> $('howOverlay').classList.add('hidden'));
+$('openSettings')?.addEventListener('click', ()=>{ $('menuOverlay').classList.add('hidden'); $('settingsOverlay').classList.remove('hidden'); });
+$('closeSettings').addEventListener('click', ()=> $('settingsOverlay').classList.add('hidden'));
+
+$('btnLeader').addEventListener('click', ()=>{ $('leaderOverlay').classList.remove('hidden'); renderLeaderboard(); });
+$('closeLeader').addEventListener('click', ()=> $('leaderOverlay').classList.add('hidden'));
+
+$('btnPause').addEventListener('click', ()=>{ running = !running; $('btnPause').textContent = running ? 'Pause' : 'Resume'; $('status').textContent = running ? 'Status: Running' : 'Status: Paused'; });
+$('btnRestart').addEventListener('click', ()=> resetGame());
+$('btnConnect').addEventListener('click', ()=> connectWallet());
+$('btnSDS').addEventListener('click', ()=> connectSDS());
+
+/* ------------------ Wallet & SDS integration (stubs + SDK attempt) ------------------ */
+function connectWallet(){
+  const name = localStorage.getItem('playerName') || 'Player';
+  $('walletStatus').textContent = 'Wallet: Mock connected';
+  alert('Mock wallet connected as: ' + name + '\nFor real wallet integration use viem/wallet connectors.');
+}
+
+/* SDS integration:
+   - For production: npm i @somnia-chain/streams viem and follow SDK docs.
+   - Here we show instructions or try a global SDK if developer bundled it.
+*/
+let sdsConnected = false;
+async function connectSDS(){
+  if(window.SomniaSDK){ 
+    try{
+      $('sdsStatus').textContent = 'SDS: connecting...';
+      const sdk = new window.SomniaSDK.default({ /* config */ });
+      $('sdsStatus').textContent = 'SDS: connected (global)';
+      sdsConnected = true;
+      alert('SDS connected (global build). Configure subscription in code.');
+    }catch(err){ console.error(err); $('sdsStatus').textContent = 'SDS: error'; alert('SDS connect failed: ' + err.message); }
+    return;
+  }
+  const msg = [
+    'SDS SDK belum tersedia.',
+    'Untuk integrasi penuh (direkomendasikan):',
+    '1) di local: npm i @somnia-chain/streams viem',
+    '2) buat publicClient (viem) lalu new SDK(...)',
+    '3) subscribe dan panggil window.spawnEnemyFromStream(event.payload)'
+  ].join('\\n');
+  alert(msg);
+}
+
+/* developer helper: handle incoming sds event (map to spawn functions) */
+function handleSdsEvent(ev){
+  try{
+    if(!ev) return;
+    const t = ev.type || ev.event || ev.action;
+    if(t === 'spawnEnemy'){ window.spawnEnemyFromStream(ev.data || {}); }
+    else if(t === 'spawnPowerup'){ window.spawnPowerupFromStream(ev.data || {}); }
+  }catch(err){ console.warn('sds event handle err', err); }
+}
+
+/* ------------------ main start (wait assets) ------------------ */
+(async function startWhenReady(){
+  while(assetsLoadedCount < Object.keys(assetPaths).length){
+    $('loadingInfo').textContent = 'Loading images...';
+    await new Promise(r=>setTimeout(r,120));
+  }
+  $('loadingInfo').textContent = 'Finalizing...';
+  await new Promise(r=>setTimeout(r,220));
+  assetsReady = true;
+  loadingOverlay.style.display = 'none';
+  resetGame();
+  for(let i=0;i<2;i++) spawnEnemy();
+  lastFrame = Date.now();
+  loop();
+})();
+
+/* expose global debug spawns */
+window._debug = { spawnEnemy, spawnPowerupRandom, spawnEnemyAtLane, spawnPowerupAt };
+</script>
+
 </body>
 </html>
