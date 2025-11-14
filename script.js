@@ -6,20 +6,22 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
 function resizeCanvas(){
-  const padH = 140;
+  // smaller top pad so canvas taller on mobile; enforce larger min height
+  const padH = 100;
   let W = Math.min(window.innerWidth - 24, 900);
-  let H = Math.min(window.innerHeight - padH, 1300);
+  let H = Math.min(window.innerHeight - padH, 1600);
   if(window.innerWidth < 600) W = window.innerWidth - 20;
   canvas.width = Math.max(320, W);
-  canvas.height = Math.max(420, H);
+  // make minimum height larger so play area longer
+  canvas.height = Math.max(600, H);
 }
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
 // CONFIG
 const LANES = 4;
-const MAX_ENEMIES = 14;
-const POWERUP_CHANCE = 0.05;
+const MAX_ENEMIES = 16;
+const POWERUP_CHANCE = 0.06;
 const MAX_POWERUPS = 1;
 const MIN_POWERUP_DIST = 140;
 
@@ -54,44 +56,54 @@ async function preloadAll(){
   assets.bomb = bomb;
   assets.life = life;
   assets.shild = shild;
-  // debug
-  console.log('assets loaded:', {
-    bomb: !!bomb, life: !!life, shild: !!shild
-  });
+  console.log('assets loaded:', { bomb: !!bomb, life: !!life, shild: !!shild });
   assetsReady = true;
   resetGame();
 }
 preloadAll();
 
 // STARS
-function initStars(){ stars=[]; const n = Math.max(40, Math.floor(canvas.width*0.05)); for(let i=0;i<n;i++) stars.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,r:Math.random()*1.6+0.6,alpha:0.15+Math.random()*0.85,speed:0.02+Math.random()*0.06}); }
+function initStars(){ stars=[]; const n = Math.max(40, Math.floor(canvas.width*0.06)); for(let i=0;i<n;i++) stars.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,r:Math.random()*1.6+0.6,alpha:0.15+Math.random()*0.85,speed:0.02+Math.random()*0.06}); }
 initStars();
 
 // LANES
 function computeLanes(){ const lanes=[]; const margin=28; const usable = canvas.width - margin*2; for(let i=0;i<LANES;i++) lanes.push(margin + usable * (i + 0.5) / LANES); return lanes; }
 
 // HELPERS
-function setLevel(i){ levelIndex = Math.min(i, LEVELS.length-1); spawnInterval = LEVELS[levelIndex].spawnInterval; levelTimer = LEVELS[levelIndex].duration * 1000; document.getElementById('level').textContent = levelIndex+1; document.getElementById('levelTime').textContent = Math.ceil(levelTimer/1000); document.getElementById('status').textContent = 'Status: Level ' + (levelIndex+1); }
+function setLevel(i){ levelIndex = Math.min(i, LEVELS.length-1); spawnInterval = LEVELS[levelIndex].spawnInterval; levelTimer = LEVELS[levelIndex].duration * 1000; if(document.getElementById('level')) document.getElementById('level').textContent = levelIndex+1; if(document.getElementById('levelTime')) document.getElementById('levelTime').textContent = Math.ceil(levelTimer/1000); if(document.getElementById('status')) document.getElementById('status').textContent = 'Status: Level ' + (levelIndex+1); }
 
-// SPAWN ENEMY (spread)
+// SPAWN ENEMY (spread; sometimes target player's lane)
 let lastSpawnLane=-1, laneLastTime = new Array(LANES).fill(0);
 function spawnEnemy(){
   if(enemies.length >= MAX_ENEMIES) return;
   const lanes = computeLanes();
-  let tries=0;
-  let lane = Math.floor(Math.random()*LANES);
-  while(tries<10){
-    const now = Date.now();
-    if(lane !== lastSpawnLane && (now - laneLastTime[lane] > 350)) break;
-    lane = Math.floor(Math.random()*LANES); tries++;
+
+  // determine lane: with some probability target the lane closest to player
+  let lane;
+  if(Math.random() < 0.45){ // 45% chance to spawn in player's lane (forces movement)
+    // find nearest lane index to player's center
+    const px = player.x + player.w/2;
+    let best = 0; let bestd = Infinity;
+    for(let i=0;i<lanes.length;i++){ const d = Math.abs(lanes[i]-px); if(d < bestd){ bestd = d; best = i; } }
+    lane = best;
+  } else {
+    // choose a lane attempting to avoid repeating same lane too often
+    let tries=0;
+    lane = Math.floor(Math.random()*LANES);
+    while(tries<8){
+      const now = Date.now();
+      if(lane !== lastSpawnLane && (now - laneLastTime[lane] > 280)) break;
+      lane = Math.floor(Math.random()*LANES); tries++;
+    }
   }
+
   lastSpawnLane = lane; laneLastTime[lane] = Date.now();
   const laneX = lanes[lane];
   const jitter = (Math.random()-0.5) * Math.min(26, canvas.width*0.03);
   const x = Math.max(12, Math.min(laneX - 20 + jitter, canvas.width - 48));
   const base = 2 + Math.random()*2.6;
   const speed = base * LEVELS[levelIndex].speedMul;
-  const size = 18 + Math.random()*36;
+  const size = 20 + Math.random()*42; // slightly larger enemies
   const r = Math.random();
   let type = 'red'; if(r<0.10) type='big'; else if(r<0.30) type='zig'; else if(r<0.45) type='home';
   enemies.push({lane, x, y:-size, w:size, h:size, speed, ay:0.01 + Math.random()*0.03, type, phase:Math.random()*Math.PI*2, oscAmp:6+Math.random()*18, oscSpeed:0.004+Math.random()*0.01, trail:[]});
@@ -106,7 +118,8 @@ function spawnPowerupAt(x,y){
   }
   const types = ['shild','life','bomb','score'];
   const t = types[Math.floor(Math.random()*types.length)];
-  const size = Math.floor(Math.max(40, Math.min(canvas.width*0.08, 56)));
+  // bigger powerup size
+  const size = Math.floor(Math.max(48, Math.min(canvas.width*0.12, 84)));
   powerups.push({x:Math.max(8,Math.min(x, canvas.width - size - 8)), y, w:size, h:size, type:t, dy:1.6, created:Date.now()});
 }
 
@@ -133,7 +146,7 @@ function fallbackStep(dt){
       const lx = lanes[Math.floor(Math.random()*lanes.length)];
       spawnPowerupAt(Math.max(16, Math.min(lx + (Math.random()-0.5)*40, canvas.width-40)), -28);
     }
-    spawnInterval = Math.max(380, spawnInterval - 0.2);
+    spawnInterval = Math.max(300, spawnInterval - 0.25);
   }
 }
 
@@ -153,7 +166,7 @@ function update(dt){
     if(Math.random() < 0.58) addTrail(e);
     if(e.trail) for(const t of e.trail) t.age += dt;
     if(rectIntersect(player, e) && running){ onPlayerHit(e); enemies.splice(i,1); continue; }
-    if(e.y > canvas.height + 140){ enemies.splice(i,1); score++; document.getElementById('score').textContent = score; }
+    if(e.y > canvas.height + 140){ enemies.splice(i,1); score++; if(document.getElementById('score')) document.getElementById('score').textContent = score; }
   }
 
   for(let i=powerups.length-1;i>=0;i--){
@@ -166,17 +179,17 @@ function update(dt){
     const t = particles[i]; t.age += dt; t.x += t.vx * dt * 0.02; t.y += t.vy * dt * 0.02; if(t.age > t.life) particles.splice(i,1);
   }
 
-  if(levelTimer > 0){ levelTimer -= dt; document.getElementById('levelTime').textContent = Math.max(0, Math.ceil(levelTimer/1000)); if(levelTimer <= 0){ const next = Math.min(levelIndex + 1, LEVELS.length-1); setLevel(next); score += 8; document.getElementById('score').textContent = score; } }
+  if(levelTimer > 0){ levelTimer -= dt; if(document.getElementById('levelTime')) document.getElementById('levelTime').textContent = Math.max(0, Math.ceil(levelTimer/1000)); if(levelTimer <= 0){ const next = Math.min(levelIndex + 1, LEVELS.length-1); setLevel(next); score += 8; if(document.getElementById('score')) document.getElementById('score').textContent = score; } }
 }
 
 // COLLISIONS & POWERUPS
 function rectIntersect(a,b){ const pad=6; return !(a.x + a.w - pad < b.x || a.x > b.x + b.w - pad || a.y + a.h - pad < b.y || a.y > b.y + b.h - pad); }
-function onPlayerHit(e){ if(player.shield>0){ player.shield--; document.getElementById('shield').textContent = player.shield; spawnParticles(player.x+player.w/2, player.y+player.h/2, '#9be7ff', 14); return; } lives--; document.getElementById('lives').textContent = lives; spawnParticles(player.x+player.w/2, player.y+player.h/2, '#ff6b6b', 20); if(lives<=0){ running=false; document.getElementById('status').textContent = 'GAME OVER'; } }
+function onPlayerHit(e){ if(player.shield>0){ player.shield--; if(document.getElementById('shield')) document.getElementById('shield').textContent = player.shield; spawnParticles(player.x+player.w/2, player.y+player.h/2, '#9be7ff', 14); return; } lives--; if(document.getElementById('lives')) document.getElementById('lives').textContent = lives; spawnParticles(player.x+player.w/2, player.y+player.h/2, '#ff6b6b', 20); if(lives<=0){ running=false; if(document.getElementById('status')) document.getElementById('status').textContent = 'GAME OVER'; } }
 function applyPowerup(t){
-  if(t==='shild'){ player.shield = Math.min(3, player.shield+1); document.getElementById('shield').textContent = player.shield; }
-  else if(t==='life'){ lives = Math.min(5, lives+1); document.getElementById('lives').textContent = lives; }
+  if(t==='shild'){ player.shield = Math.min(3, player.shield+1); if(document.getElementById('shield')) document.getElementById('shield').textContent = player.shield; }
+  else if(t==='life'){ lives = Math.min(5, lives+1); if(document.getElementById('lives')) document.getElementById('lives').textContent = lives; }
   else if(t==='bomb'){ enemies = enemies.filter(x=> x.type === 'big'); spawnParticles(canvas.width/2, canvas.height/2, '#ffd36b', 40); }
-  else if(t==='score'){ score += 12; document.getElementById('score').textContent = score; }
+  else if(t==='score'){ score += 12; if(document.getElementById('score')) document.getElementById('score').textContent = score; }
 }
 
 // DRAW
@@ -232,14 +245,13 @@ function draw(){
         const angle = Math.sin(now * 0.0025) * 0.22; // small tilt
         ctx.translate(cx, cy);
         ctx.rotate(angle);
-        const s = Math.min(canvas.width*0.10, p.w*1.05);
+        const s = Math.min(canvas.width*0.14, p.w*1.25);
         ctx.drawImage(img, -s/2, -s/2, s, s);
       } else {
-        const s = Math.min(canvas.width*0.10, p.w*1.05);
+        const s = Math.min(canvas.width*0.14, p.w*1.25);
         ctx.drawImage(img, cx - s/2, cy - s/2, s, s);
       }
     } else {
-      // if image missing, draw NOTHING (so no box)
       if(!p._warned){ console.warn('missing asset for powerup type', p.type); p._warned = true; }
     }
     ctx.restore();
@@ -297,9 +309,9 @@ function resetGame(){
   player.vx = 0; player.shield = 0;
   enemies=[]; powerups=[]; particles=[]; initStars();
   score = 0; lives = 3; running = true;
-  document.getElementById('score').textContent = score;
-  document.getElementById('lives').textContent = lives;
-  document.getElementById('shield').textContent = player.shield;
+  if(document.getElementById('score')) document.getElementById('score').textContent = score;
+  if(document.getElementById('lives')) document.getElementById('lives').textContent = lives;
+  if(document.getElementById('shield')) document.getElementById('shield').textContent = player.shield;
   setLevel(0);
   spawnInterval = LEVELS[levelIndex].spawnInterval;
   fallbackTimer = 0;
