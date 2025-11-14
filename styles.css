@@ -1,28 +1,144 @@
- :root{
-  --bg-start:#020215;
-  --bg-mid:#071028;
-  --bg-end:#041226;
-  --accent:#33eaff;
-  --btn-bg:#0ea5a5; --btn-color:#071026;
+/* styles.css — Replace whole file with this */
+
+/* base */
+:root{
+  --bg-1: #020215;
+  --bg-2: #041026;
+  --panel: rgba(255,255,255,0.03);
+  --teal: #15b0a9;
+  --teal-dark: #0b7f77;
+  --muted: #cbd5e1;
+  --accent: #3dd5ff;
+  --radius: 14px;
+  --shadow-strong: 0 18px 40px rgba(2,6,23,0.6);
 }
+
 *{box-sizing:border-box}
-html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial;background:linear-gradient(180deg,var(--bg-start) 0%, var(--bg-mid) 60%, var(--bg-end) 100%);color:#e6eef8;display:flex;align-items:flex-start;justify-content:center;padding:18px;}
-.app{width:100%;max-width:720px}
-.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-h1{font-size:18px;margin:0;color:#f0f7ff}
-.top-right{display:flex;gap:8px}
-.canvas-wrap{display:flex;justify-content:center}
-canvas{border-radius:14px;background:transparent;box-shadow:0 18px 48px rgba(2,6,23,0.6);width:100%;max-width:520px;height:auto;display:block}
-.hud{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;margin-top:8px}
-.badge{padding:6px 10px;border-radius:999px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);font-size:13px;color:#dbeafe}
-.controls-row{display:flex;gap:8px;justify-content:center;margin-top:8px}
-.btn{background:var(--btn-bg);color:var(--btn-color);border-radius:10px;padding:8px 10px;border:0;font-weight:700;cursor:pointer}
-.small{font-size:12px;padding:6px 8px}
-.hint{font-size:12px;color:#cbd5e1;text-align:center;margin-top:8px}
-.panel{background:linear-gradient(180deg, rgba(10,12,25,0.96), rgba(8,12,24,0.98));padding:12px;border-radius:10px;color:#e6eef8;max-width:520px;width:100%;box-shadow:0 8px 24px rgba(0,0,0,0.5);margin-top:10px}
-.panel.hidden{display:none}
-.panel-row{display:flex;justify-content:space-between;align-items:center}
-.menu-body{display:flex;gap:8px;align-items:center;margin-top:8px}
-.list{margin-top:8px}
-.list div{padding:8px;border-radius:8px;background:rgba(255,255,255,0.02);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
-@media(max-width:420px){ .app{padding:6px} h1{font-size:16px} canvas{max-width:380px} .btn{padding:7px 8px} }
+html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;color:#e6eef8;background:linear-gradient(180deg,var(--bg-1) 0%, #041026 60%);-webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale}
+
+/* page layout */
+.page {
+  max-width:1080px;
+  margin:18px auto;
+  padding:12px;
+  display:grid;
+  grid-template-columns: 240px 1fr;
+  gap:18px;
+  align-items:start;
+}
+
+/* mobile: single column */
+@media (max-width:880px){
+  .page{grid-template-columns: 1fr; padding:10px}
+}
+
+/* left column (title/menu) */
+.left {
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  align-items:flex-start;
+}
+.brand {
+  background:transparent;
+  color:var(--muted);
+  font-weight:700;
+  font-size:18px;
+  padding:10px 14px;border-radius:12px;
+}
+.menu-btn {
+  background:var(--panel); color:var(--muted); padding:8px 12px; border-radius:10px; border: none;
+}
+
+/* main column */
+.main {
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  align-items:center;
+}
+
+/* game panel */
+.game-panel{
+  width:100%;
+  max-width:420px;
+  border-radius:16px;
+  background:linear-gradient(180deg, rgba(1,6,20,0.25), rgba(2,6,23,0.12));
+  box-shadow:var(--shadow-strong);
+  padding:14px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+}
+
+/* responsive canvas sizing */
+#game{
+  width:100%;
+  height: calc(min(80vh, 720px));
+  border-radius:10px;
+  background:transparent;
+  display:block;
+  box-shadow: 0 12px 30px rgba(2,6,23,0.6);
+  border:1px solid rgba(255,255,255,0.02);
+}
+
+/* controls row */
+.controls{
+  display:flex;
+  gap:10px;
+  margin-top:10px;
+  flex-wrap:wrap;
+  justify-content:center;
+}
+
+button.ctrl{
+  background:var(--teal);
+  color:#021022;
+  font-weight:700;
+  border:none;
+  padding:10px 16px;
+  border-radius:12px;
+  min-width:90px;
+  box-shadow: 0 6px 18px rgba(6,30,30,0.15);
+  cursor:pointer;
+}
+button.ctrl.ghost{background:transparent;color:var(--muted);border:1px solid rgba(255,255,255,0.04)}
+
+/* HUD badges */
+.hud{
+  display:flex;
+  gap:10px;
+  margin-top:8px;
+  justify-content:center;
+  flex-wrap:wrap;
+}
+.badge{
+  padding:8px 12px;
+  background:rgba(255,255,255,0.03);
+  color:var(--muted);
+  border-radius:999px;
+  font-size:13px;
+  border:1px solid rgba(255,255,255,0.03);
+}
+
+/* bottom info & hint */
+.hint{
+  text-align:center;
+  font-size:13px;
+  color:#98a7bb;
+  margin-top:6px;
+  max-width:720px;
+}
+
+/* small-screen adjustments */
+@media(max-width:520px){
+  .page{padding:10px}
+  .left{flex-direction:row;align-items:center;justify-content:space-between}
+  .brand{font-size:16px;padding:6px 10px}
+  .game-panel{max-width:100%}
+  #game{height:68vh}
+  .controls button{min-width:64px;padding:8px 10px}
+}
+
+/* utility: hide default browser focus style but keep keyboard focus visible */
+button:focus{outline:2px solid rgba(61,213,255,0.12);outline-offset:2px}
